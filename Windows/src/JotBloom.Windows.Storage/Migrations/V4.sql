@@ -1,0 +1,2 @@
+ALTER TABLE prompts ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0; ALTER TABLE prompts ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0 CHECK(is_favorite IN (0,1)); ALTER TABLE inspirations ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0; UPDATE prompts SET sort_order = created_at_utc_ms; UPDATE inspirations SET sort_order = created_at_utc_ms; CREATE INDEX prompts_manual_order ON prompts(sort_order DESC,id DESC); CREATE INDEX inspirations_manual_order ON inspirations(sort_order DESC,id DESC); PRAGMA user_version = 4;
+PRAGMA user_version=4;

@@ -18,3 +18,9 @@ artifacts/
 .env.*
 *.p12
 *.pfx
+
+# Windows build outputs and installer artifacts
+**/bin/
+**/obj/
+**/__pycache__/
+*.exe

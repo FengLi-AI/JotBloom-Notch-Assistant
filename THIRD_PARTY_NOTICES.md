@@ -1,6 +1,6 @@
 # 平台与第三方资源说明
 
-本次公开源码为 Swift / SwiftUI / AppKit 工程，使用系统 SQLite。仓库不打包 Apple SDK 或第三方模型权重。
+Mac 源码为 Swift / SwiftUI / AppKit 工程，使用系统 SQLite。Windows 源码为 C# / WPF 工程，使用 .NET 10、Microsoft.Data.Sqlite 和 SQLitePCLRaw。仓库不打包 Apple SDK 或第三方模型权重。
 
 - Apple 框架、系统图标和应用运行时取得的其他 App 图标属于对应权利方；本项目 MIT 许可不替代这些资源的原有使用条款。
 - XcodeGen 为可选的工程生成工具，不随本安装包分发；其许可见 [XcodeGen 项目](https://github.com/yonaskolb/XcodeGen)。
@@ -8,3 +8,5 @@
 - GitHub、macOS、Apple Silicon 等名称及标志归各自权利方所有，不代表对本项目背书。
 
 本项目自身代码适用根目录 LICENSE。若发现署名或资源授权遗漏，请联系作者处理。
+
+Windows 分发包含 .NET / Windows Desktop Runtime 10.0.12（MIT）、Microsoft.Data.Sqlite 10.0.12（MIT）、SQLitePCLRaw 2.1.12（Apache-2.0）及 SQLite（公有领域）。许可证原文及第三方声明随安装包提供，亦见 [Windows/licenses](Windows/licenses/)。
