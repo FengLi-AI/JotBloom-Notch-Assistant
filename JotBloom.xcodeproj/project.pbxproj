@@ -56,6 +56,7 @@
 		4537C0D7EFB8B2781C379E0E /* HotZoneClickPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34016F134DF378E6CE8BB5F /* HotZoneClickPolicyTests.swift */; };
 		45F596C5FAF1673D1492AC4D /* ClipboardContentClassifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 371BE881ED7FDCC54C951BD1 /* ClipboardContentClassifier.swift */; };
 		4761B23F185BC3BFF3BA745A /* ClipboardServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77ABB89E643A8273463988D0 /* ClipboardServiceTests.swift */; };
+		4AE0FE21809F4CE93D9F5AA4 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = FA695FD865576D61E97B5CDF /* AppIcon.icns */; };
 		4B0D96DD7526D56E1A06B91A /* GlobalSearchViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53AE920C56F9315C4B3D9087 /* GlobalSearchViewModel.swift */; };
 		4B6C5E02E754BC011FA863EF /* ClipboardTestFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3552066F7DBE5353881E3C92 /* ClipboardTestFixtures.swift */; };
 		4E303EB22AF04ED7004BEBAF /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2D81F3AE9746710EA6B9CF9 /* AppDelegate.swift */; };
@@ -108,6 +109,7 @@
 		AAB6B8785901E75237E3BF46 /* TestTemporaryDirectory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BD45AE4D51C27BD492A978D /* TestTemporaryDirectory.swift */; };
 		ADED838379D50889651C301D /* ClipboardItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67E657E1AA08F23CF791E963 /* ClipboardItem.swift */; };
 		AF8175DD323778885620ABF2 /* Chat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A3A8083F3852729FAA28867 /* Chat.swift */; };
+		AFB5341EEAA33BA08344E447 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 605432263A6E37DD9942120D /* InfoPlist.strings */; };
 		B045B697F8D168887AD349BE /* DataLocationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B2EB69F06A6D6FF77BB7C71 /* DataLocationStore.swift */; };
 		B0A270E3044D293DC9453B4B /* ScreenLocator.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFF18CBBF19CA44DEEBD665C /* ScreenLocator.swift */; };
 		B591DA0E471ABFFEA2FE1216 /* GlobalSearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77D64AF5D6DD2B452D2CA4F7 /* GlobalSearchView.swift */; };
@@ -244,6 +246,7 @@
 		5EEBF6D81F76549CF107AFBA /* ChatStreamTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatStreamTests.swift; sourceTree = "<group>"; };
 		5F688C75E6BB4FEC125686C7 /* SettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsTests.swift; sourceTree = "<group>"; };
 		5F710F04EB9F91A3AC4F6D5B /* LibraryOrganization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryOrganization.swift; sourceTree = "<group>"; };
+		60C9C12BC6137B1C4FD91F27 /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
 		621D1C61E8A4E656454FD9F1 /* ClipboardSourceApplicationProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardSourceApplicationProvider.swift; sourceTree = "<group>"; };
 		652A3E72B94ED3A2C08D4E75 /* JotBloomTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = JotBloomTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		65A550B79A8265620906745C /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
@@ -254,6 +257,7 @@
 		6BD45AE4D51C27BD492A978D /* TestTemporaryDirectory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestTemporaryDirectory.swift; sourceTree = "<group>"; };
 		6DF4F5F53F940735CDDFE5B5 /* StageNineSmokeRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StageNineSmokeRunner.swift; sourceTree = "<group>"; };
 		6FCDBE9D2551BD35241E05AA /* PanelChromeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanelChromeView.swift; sourceTree = "<group>"; };
+		7170AF09423EE7284115B3E7 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		72A06C84D91F1A40D0F29FD0 /* PasteboardMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasteboardMonitor.swift; sourceTree = "<group>"; };
 		7434D8D712EF0605FE3E32E5 /* SettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewModel.swift; sourceTree = "<group>"; };
 		75FF06DF8B4A4D6794BE0B74 /* ChatComposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatComposer.swift; sourceTree = "<group>"; };
@@ -261,6 +265,7 @@
 		77D64AF5D6DD2B452D2CA4F7 /* GlobalSearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalSearchView.swift; sourceTree = "<group>"; };
 		796929B33F9492DF92DF67B1 /* ClipboardHistoryRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardHistoryRow.swift; sourceTree = "<group>"; };
 		79BCCD5EFABCCA9121318CE3 /* ChatScrollMemory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatScrollMemory.swift; sourceTree = "<group>"; };
+		7B4447148C9D63631A0713F9 /* zh-Hant */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hant"; path = "zh-Hant.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
 		7F2EFAC4E39B4415F9C8C148 /* ClipboardContentClassifierTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardContentClassifierTests.swift; sourceTree = "<group>"; };
 		7F6DC6AA5DC3D07B4A6A16E1 /* JotBloomStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JotBloomStore.swift; sourceTree = "<group>"; };
 		8070EC53F64AD7410C4785EC /* ClipboardHistoryViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardHistoryViewModelTests.swift; sourceTree = "<group>"; };
@@ -327,6 +332,7 @@
 		F886255AB28F66A7FF320513 /* StageThreeSmokeRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StageThreeSmokeRunner.swift; sourceTree = "<group>"; };
 		F8C2D391595E7A43D4D6D5EF /* JotBloom.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = JotBloom.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		FA3FBEF4544C5F26160D39E6 /* ClipboardSourceSelector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardSourceSelector.swift; sourceTree = "<group>"; };
+		FA695FD865576D61E97B5CDF /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
 		FA6B459C7AC2C6296CB5C582 /* HotZoneClickPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotZoneClickPolicy.swift; sourceTree = "<group>"; };
 		FCB31ABF6EEC25F41D4515BE /* PanelRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanelRootView.swift; sourceTree = "<group>"; };
 		FD979CA390C9F383ECFC668D /* StageThreeDebugHarness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StageThreeDebugHarness.swift; sourceTree = "<group>"; };
@@ -428,6 +434,15 @@
 				CE993F1BF8B91164C0735DA0 /* PromptTitleService.swift */,
 			);
 			path = Settings;
+			sourceTree = "<group>";
+		};
+		63D6E79028E03FCCD0909CB3 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				FA695FD865576D61E97B5CDF /* AppIcon.icns */,
+				605432263A6E37DD9942120D /* InfoPlist.strings */,
+			);
+			path = Resources;
 			sourceTree = "<group>";
 		};
 		6A366143DC1ED05FF0AA891F /* JotBloomTests */ = {
@@ -594,6 +609,7 @@
 				821EF662FC47D4E6BEBEA96B /* Features */,
 				8DCDA2D9A93332F39C28A83F /* Panel */,
 				FCA9A62A900ED34CB31B8AFE /* Platform */,
+				63D6E79028E03FCCD0909CB3 /* Resources */,
 			);
 			path = JotBloom;
 			sourceTree = "<group>";
@@ -736,6 +752,7 @@
 			buildConfigurationList = 2D657E1033D3AF8BD8623618 /* Build configuration list for PBXNativeTarget "JotBloom" */;
 			buildPhases = (
 				80775D11E3837E171AEB159C /* Sources */,
+				2FA733E8A72FA957E8F99E63 /* Resources */,
 				BAB82AE0B32CAAE7CBD2BA3B /* Frameworks */,
 				76B64DA3F0544B3B4D7D99BA /* Embed Frameworks */,
 			);
@@ -771,6 +788,8 @@
 			knownRegions = (
 				Base,
 				en,
+				"zh-Hans",
+				"zh-Hant",
 			);
 			mainGroup = 42990E998F35649B9021738C;
 			minimizedProjectReferenceProxies = 1;
@@ -785,6 +804,18 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		2FA733E8A72FA957E8F99E63 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4AE0FE21809F4CE93D9F5AA4 /* AppIcon.icns in Resources */,
+				AFB5341EEAA33BA08344E447 /* InfoPlist.strings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		80775D11E3837E171AEB159C /* Sources */ = {
@@ -960,6 +991,19 @@
 		};
 /* End PBXTargetDependency section */
 
+/* Begin PBXVariantGroup section */
+		605432263A6E37DD9942120D /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				7170AF09423EE7284115B3E7 /* en */,
+				60C9C12BC6137B1C4FD91F27 /* zh-Hans */,
+				7B4447148C9D63631A0713F9 /* zh-Hant */,
+			);
+			name = InfoPlist.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
 /* Begin XCBuildConfiguration section */
 		0C62F6EEB122B4CBA788CE87 /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -1065,9 +1109,10 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 1102;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = NO;
+				EXECUTABLE_NAME = JotBloom;
 				INFOPLIST_FILE = JotBloom/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1075,7 +1120,8 @@
 				);
 				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jotbloom.mengsheng;
-				PRODUCT_NAME = JotBloom;
+				PRODUCT_MODULE_NAME = JotBloom;
+				PRODUCT_NAME = "萌生｜JotBloom";
 				SDKROOT = macosx;
 			};
 			name = Debug;
@@ -1110,9 +1156,10 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 1102;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = NO;
+				EXECUTABLE_NAME = JotBloom;
 				INFOPLIST_FILE = JotBloom/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1120,7 +1167,8 @@
 				);
 				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jotbloom.mengsheng;
-				PRODUCT_NAME = JotBloom;
+				PRODUCT_MODULE_NAME = JotBloom;
+				PRODUCT_NAME = "萌生｜JotBloom";
 				SDKROOT = macosx;
 			};
 			name = Release;

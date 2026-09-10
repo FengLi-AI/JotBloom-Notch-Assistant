@@ -4,7 +4,7 @@
 
 一个为轻度创作和日常电脑办公设计的 Mac 屏幕顶部小工具：随手记录灵感、找回复制过的内容、收藏常用提示词，再与 AI 继续讨论想法。
 
-[访问官网](https://fengli-ai.github.io/JotBloom-Notch-Assistant/) · [下载 macOS 安装包](https://github.com/FengLi-AI/JotBloom-Notch-Assistant/releases/download/v1.0.0-preview.1/JotBloom-1.0.0-preview.1-universal.dmg) · [版本说明](https://github.com/FengLi-AI/JotBloom-Notch-Assistant/releases/tag/v1.0.0-preview.1) · [反馈 Bug / 建议](https://github.com/FengLi-AI/JotBloom-Notch-Assistant/issues)
+[访问官网](https://fengli-ai.github.io/JotBloom-Notch-Assistant/) · [下载 macOS 安装包](https://github.com/FengLi-AI/JotBloom-Notch-Assistant/releases/download/v1.0.0-preview.2/JotBloom-1.0.0-preview.2-universal.dmg) · [版本说明](https://github.com/FengLi-AI/JotBloom-Notch-Assistant/releases/tag/v1.0.0-preview.2) · [反馈 Bug / 建议](https://github.com/FengLi-AI/JotBloom-Notch-Assistant/issues)
 
 ![萌生灵感记录界面](site/assets/inspiration.png)
 
@@ -21,14 +21,14 @@
 
 ## 下载与安装
 
-当前版本为 **1.0.0-preview.1 公开预览版**，应用版本 1.0.0 / 构建 1101，安装包约 3.9 MB。
+当前版本为 **1.0.0-preview.2 公开预览版**，应用版本 1.0.0 / 构建 1102，安装包约 5.2 MB。
 
 1. 从上方链接下载 DMG，必要时对照 Releases 中的 `SHA256SUMS.txt` 校验。
-2. 打开 DMG，将 `JotBloom.app` 拖到“应用程序”。
+2. 打开 DMG，将 `萌生｜JotBloom.app` 拖到“应用程序”。
 3. 从“应用程序”启动，不要长期从磁盘映像运行。
 4. 升级前保存内容、退出旧版，并保留旧 App 和重要数据备份。
 
-构建目标为 macOS 13 及以上，包含 Apple Silicon / Intel 双架构。**最低系统、Intel 真机及完整新装/升级权限体验仍待更多验证**，不保证所有设备兼容。当前还没有专用安装图标。
+构建目标为 macOS 13 及以上，包含 Apple Silicon / Intel 双架构。**最低系统、Intel 真机及完整新装/升级权限体验仍待更多验证**，不保证所有设备兼容。本版已内置正式图标，系统名称为“萌生｜JotBloom”。
 
 当前安装包使用 ad-hoc 签名，**未经过 Apple 公证**。系统可能显示安全提示；请核实下载来源，仅在信任后依照 [Apple 官方说明](https://support.apple.com/zh-cn/102445) 处理，不要关闭系统安全保护。受管理设备可能禁止启动。
 
