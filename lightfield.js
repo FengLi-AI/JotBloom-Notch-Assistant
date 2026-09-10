@@ -21,7 +21,38 @@
   // claim that the browser has completed a download (not observable cross-origin).
   document.querySelectorAll('[data-download]').forEach(link=>link.addEventListener('click',event=>{if(event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;setTimeout(()=>{if(!message.open)message.showModal();},350);}));
   document.querySelectorAll('dialog').forEach(dialog=>{dialog.querySelectorAll('.close,.close-message').forEach(b=>b.addEventListener('click',()=>dialog.close()));dialog.addEventListener('click',e=>{if(e.target===dialog){const r=dialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)dialog.close();}});});
-  const questions=[...document.querySelectorAll('.questions details')];questions.forEach(q=>q.addEventListener('toggle',()=>{if(q.open)questions.forEach(other=>{if(q!==other)other.open=false;});}));
+  // Reserve the largest single answer so document height and the scroll-driven
+  // light field stay constant while answers cross-expand. Keep native details
+  // semantics and keyboard activation; only intercept the visual transition.
+  const questionBox=document.querySelector('.questions'),questions=[...questionBox.querySelectorAll('details')],answerAnimations=new Map();
+  let activeQuestion=questions.find(q=>q.open)||null;
+  questions.forEach(q=>{q.removeAttribute('name');q.dataset.expanded=String(q===activeQuestion);q.querySelector('summary').setAttribute('aria-expanded',String(q===activeQuestion));});
+  function reserveAnswers(){
+    const clone=questionBox.cloneNode(true);clone.style.cssText=`position:fixed;left:-10000px;top:0;width:${questionBox.getBoundingClientRect().width}px;visibility:hidden;pointer-events:none;min-height:0;`;
+    clone.setAttribute('aria-hidden','true');clone.inert=true;document.body.append(clone);
+    let collapsed=0,largest=0;
+    clone.querySelectorAll('details').forEach(q=>{q.open=true;const answer=q.querySelector(':scope > div');answer.style.height='auto';answer.style.overflow='visible';const height=answer.getBoundingClientRect().height;collapsed+=q.getBoundingClientRect().height-height;largest=Math.max(largest,height);});
+    clone.remove();questionBox.style.minHeight=Math.ceil(collapsed+largest+1)+'px';
+  }
+  function switchQuestion(next,animate=true){
+    const heights=new Map(questions.map(q=>[q,q.open?q.querySelector(':scope > div').getBoundingClientRect().height:0]));
+    activeQuestion=next;
+    questions.forEach(q=>{
+      const answer=q.querySelector(':scope > div'),opening=q===next,from=heights.get(q);
+      answerAnimations.get(q)?.cancel();answerAnimations.delete(q);
+      q.dataset.expanded=String(opening);q.querySelector('summary').setAttribute('aria-expanded',String(opening));
+      if(!animate||reduced.matches){q.open=opening;answer.style.height='';answer.style.overflow='';return;}
+      if(!q.open&&!opening)return;
+      q.open=true;answer.style.height='auto';const to=opening?answer.getBoundingClientRect().height:0;
+      answer.style.height=from+'px';answer.style.overflow='hidden';
+      const animation=answer.animate([{height:from+'px'},{height:to+'px'}],{duration:320,easing:'cubic-bezier(.22,1,.36,1)',fill:'forwards'});answerAnimations.set(q,animation);
+      animation.onfinish=()=>{if(answerAnimations.get(q)!==animation)return;q.open=opening;answer.style.height='';answer.style.overflow='';animation.cancel();answerAnimations.delete(q);};
+    });
+  }
+  questions.forEach(q=>q.querySelector('summary').addEventListener('click',e=>{e.preventDefault();switchQuestion(activeQuestion===q?null:q);}));
+  reserveAnswers();document.fonts.ready.then(reserveAnswers);
+  let questionWidth=questionBox.clientWidth;new ResizeObserver(()=>{if(questionWidth===questionBox.clientWidth)return;questionWidth=questionBox.clientWidth;switchQuestion(activeQuestion,false);reserveAnswers();}).observe(questionBox);
+  reduced.addEventListener('change',()=>{switchQuestion(activeQuestion,false);reserveAnswers();});
 
   // Center each explicit line by its text glyphs, assigning punctuation no weight.
   const opticalTargets=[...document.querySelectorAll('.section-title h2,.shortcut h2,#feature-heading')];

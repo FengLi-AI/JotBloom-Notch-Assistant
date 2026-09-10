@@ -71,3 +71,19 @@ dialog{color:var(--ink);border:1px solid #b6d3fc40;background:#182953;border-rad
 .contact a:hover{color:#fff;text-decoration:underline}
 .contact small{font-size:11px;color:#8faed5}
 @media(max-width:600px){.toy-version{left:29px;top:43px;font-size:12px}}
+
+/* Equal platform choices share one clear, free download area. */
+.hero-bottom{grid-template-columns:minmax(0,1fr) 360px;gap:48px}
+.hero-aside .free-note{display:flex;align-items:center;gap:10px;margin:0 0 15px;font-size:12px;line-height:1.4;color:#d5e6fa}
+.free-note strong{font-size:14px;font-weight:600;color:#a4f2d3;border:1px solid #a4f2d34d;border-radius:20px;padding:5px 12px;background:#75deb915}
+.download-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;width:100%;max-width:390px}
+.download-pair .pill{width:100%;min-width:0;gap:10px;padding:17px 12px;white-space:nowrap}
+.hero-aside small{line-height:1.8;font-size:10px;max-width:360px}
+.shortcut .download-pair{margin-inline:auto}.shortcut-note{line-height:1.9}
+.questions{border-top:1px solid #b5d0fa24;align-self:start;overflow-anchor:none}
+.questions details>div{display:flow-root}
+.questions details[data-expanded="false"] summary:after{content:'+'}
+.questions details[data-expanded="true"] summary:after{content:'−'}
+@media(min-width:1500px){.hero-bottom{grid-template-columns:minmax(0,1fr) 390px}}
+@media(min-width:601px) and (max-width:1050px){.hero-bottom{grid-template-columns:minmax(0,1fr) 310px;gap:24px}.opening h1{font-size:clamp(40px,6.5vw,66px)}.download-pair .pill{font-size:12px;padding-inline:8px;gap:7px}}
+@media(max-width:600px){.hero-bottom{grid-template-columns:1fr;gap:28px}.hero-aside{display:block}.hero-aside>p:first-child{margin-bottom:14px}.hero-aside .free-note{margin-bottom:12px}.hero-aside .download-pair .pill{padding:15px 10px;gap:8px;font-size:12px}.hero-aside small{margin-top:12px}.download-pair{max-width:100%}}
