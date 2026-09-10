@@ -149,6 +149,7 @@ enum StageSixSmokeRunner {
             input.start(); library.start(); clipboard.start()
             let panel = PanelController(inspirationViewModel: input, clipboardViewModel: clipboard, inspirationLibraryViewModel: library, globalSearchViewModel: search, dataDirectory: root, settingsModel: reopenedModel)
             checks.append(("inline_settings_five_sections_and_escape", try await panel.debugSettingsProbe(output: output)))
+            checks.append(contentsOf: try await panel.debugShortcutRecordingProbe())
             checks.append(contentsOf: try await panel.debugSettingsFixesProbe(output: output))
             let readsAfterPages = await credentials.readSlots.count
             checks.append(("ai_page_reentry_zero_credential_reads", readsBeforePages == readsAfterPages))

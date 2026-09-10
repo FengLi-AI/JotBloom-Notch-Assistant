@@ -33,6 +33,7 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
     private var detailTransitionInProgress = false
     private var promptPreviousExpansion = false
     private var cancellables: Set<AnyCancellable> = []
+    private var shortcutEventMonitor: Any?
     private lazy var panel: JotBloomPanel = makePanel()
 #if DEBUG
     private var automaticDismissalEnabled = true
@@ -57,6 +58,7 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         self.promptModel = promptModel
         self.chatModel = chatModel
         super.init()
+        settingsModel?.onShortcutRecordingChanged = { [weak self] active in self?.setShortcutRecording(active) }
         chatModel?.onSystemInteraction = { [weak self] in self?.setSystemInteraction($0) }
         chatModel?.onAccepted = { [weak self] in
             guard let self, panelState.selectedTab == .chat, !panelState.isSettingsOpen else { return }
@@ -421,6 +423,53 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         passed = passed && !panelState.isSettingsOpen && !panelState.isExpanded
         dismiss()
         return passed
+    }
+
+    func debugShortcutRecordingProbe() async throws -> [(String, Bool)] {
+        guard ProcessInfo.processInfo.environment["JOTBLOOM_STAGE6_SMOKE"] == "1", let model = settingsModel else { return [] }
+        var checks: [(String, Bool)] = []
+        let original = model.value.shortcut
+        let register = model.onShortcut
+        defer {
+            model.recordingShortcut = false
+            model.onShortcut = { _ in true }; model.setShortcut(original)
+            model.onShortcut = register
+            closeSettings(); dismiss()
+        }
+        _ = present(); openSettings()
+        try await Task.sleep(nanoseconds: 250_000_000)
+        func send(_ keyCode: UInt16, _ flags: NSEvent.ModifierFlags, type: NSEvent.EventType = .keyDown, characters: String = " ") {
+            guard let event = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: flags,
+                timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: panel.windowNumber,
+                context: nil, characters: characters, charactersIgnoringModifiers: characters,
+                isARepeat: false, keyCode: keyCode) else { return }
+            NSApp.sendEvent(event)
+        }
+        model.onShortcut = { _ in true }
+        model.toggleShortcutRecording()
+        try await Task.sleep(nanoseconds: 100_000_000)
+        send(UInt16(kVK_Control), [.control], type: .flagsChanged, characters: "")
+        checks.append(("recorder_modifier_preview", model.shortcutPreview == "⌃…" && model.recordingShortcut))
+        send(UInt16(kVK_ANSI_K), [.control, .option], characters: "k")
+        checks.append(("recorder_app_dispatch_saves_combination", !model.recordingShortcut && model.value.shortcut.keyCode == 40 && model.value.shortcut.modifiers == UInt32(controlKey | optionKey)))
+        let accepted = model.value.shortcut
+        model.onShortcut = { _ in false }
+        model.toggleShortcutRecording()
+        send(UInt16(kVK_ANSI_J), [.command, .option], characters: "j")
+        checks.append(("recorder_conflict_feedback_retains_previous", model.recordingShortcut && model.value.shortcut == accepted && model.feedback?.contains("无法注册") == true))
+        send(UInt16(kVK_Space), [.shift])
+        checks.append(("recorder_shift_only_feedback", model.recordingShortcut && model.feedback == SettingsError.invalidShortcut.localizedDescription && model.value.shortcut == accepted))
+        send(UInt16(kVK_Space), [.command])
+        checks.append(("recorder_reserved_command_space_retained", model.recordingShortcut && model.value.shortcut == accepted))
+        send(UInt16(kVK_Escape), [])
+        checks.append(("recorder_escape_only_cancels", !model.recordingShortcut && shortcutEventMonitor == nil && panelState.isSettingsOpen))
+        model.onShortcut = { _ in true }
+        model.toggleShortcutRecording()
+        send(UInt16(kVK_ANSI_K), [.command, .option], characters: "k")
+        checks.append(("recorder_command_event_before_menu", !model.recordingShortcut && model.value.shortcut.modifiers == UInt32(cmdKey | optionKey)))
+        model.toggleShortcutRecording(); model.leaveSettings()
+        checks.append(("recorder_leaving_removes_monitor", shortcutEventMonitor == nil && !model.recordingShortcut))
+        return checks
     }
 
     func debugStageNineSettings(section: String) {
@@ -814,6 +863,7 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         // Directory selection preserves the route, scroll position and expanded size.
         guard !suspendedForDirectorySelection else { return }
         guard prepareForDismissal() else { return }
+        settingsModel?.recordingShortcut = false
         promptModel?.panelDismissed()
         focusEventGeneration &+= 1
         restoringSystemFocus = false
@@ -831,6 +881,8 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
     }
 
     func close() {
+        settingsModel?.recordingShortcut = false
+        setShortcutRecording(false)
         focusEventGeneration &+= 1
         restoringSystemFocus = false
         frameAnimationTimer?.invalidate()
@@ -841,6 +893,10 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
     }
 
     func windowDidResignKey(_ notification: Notification) {
+        if notification.object as? NSWindow === panel, !panel.isKeyWindow, settingsModel?.recordingShortcut == true {
+            settingsModel?.recordingShortcut = false
+            settingsModel?.feedback = "录制已取消：键盘焦点离开了萌生。若组合被系统接收，请重新录制其他组合，例如 ⌃⌥K。"
+        }
         guard notification.object as? NSWindow === panel,
               panel.isVisible, !panel.isKeyWindow, systemInteractionDepth == 0,
               !restoringSystemFocus, settingsModel?.maintaining != true else { return }
@@ -1098,6 +1154,24 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         return panel
     }
 
+    private func setShortcutRecording(_ active: Bool) {
+        if let shortcutEventMonitor {
+            NSEvent.removeMonitor(shortcutEventMonitor)
+            self.shortcutEventMonitor = nil
+        }
+        guard active else { return }
+        // An explicit recording action must own keyboard focus, even in a nonactivating panel.
+        panel.makeKeyAndOrderFront(nil)
+        panel.makeFirstResponder(panel)
+        shortcutEventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak self] event in
+            guard let self, self.panel.isKeyWindow, self.panelState.isSettingsOpen,
+                  self.settingsModel?.recordingShortcut == true,
+                  event.window == nil || event.window === self.panel else { return event }
+            // Capture before the SwiftUI responder or application menu consumes the combination.
+            return self.handleSettingsKey(event) ? nil : event
+        }
+    }
+
     private func handleSettingsKey(_ event: NSEvent) -> Bool {
         if chatModel?.confirmingDelete == true {
             if event.keyCode == UInt16(kVK_Escape) { chatModel?.confirmingDelete = false; return true }
@@ -1111,7 +1185,8 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         }
         guard let settingsModel else { return false }
         if settingsModel.maintaining { return true }
-        guard settingsModel.recordingShortcut, event.type == .keyDown else { return false }
+        guard settingsModel.recordingShortcut,
+              event.type == .keyDown || event.type == .flagsChanged else { return false }
         if event.keyCode == UInt16(kVK_Escape) { settingsModel.recordingShortcut = false; return true }
         let flags = event.modifierFlags.intersection([.command, .option, .control, .shift])
         var carbon: UInt32 = 0
@@ -1120,7 +1195,17 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         if flags.contains(.option) { carbon |= UInt32(optionKey); label += "⌥" }
         if flags.contains(.shift) { carbon |= UInt32(shiftKey); label += "⇧" }
         if flags.contains(.command) { carbon |= UInt32(cmdKey); label += "⌘" }
-        let name = event.keyCode == UInt16(kVK_Space) ? "Space" : event.charactersIgnoringModifiers?.uppercased() ?? "Key \(event.keyCode)"
+        if event.type == .flagsChanged {
+            settingsModel.shortcutPreview = label.isEmpty ? "请按下组合键…" : label + "…"
+            return true
+        }
+        if event.isARepeat { return true }
+        let specialNames: [UInt16: String] = [49: "Space", 36: "Return", 48: "Tab", 51: "Delete",
+            123: "←", 124: "→", 125: "↓", 126: "↑", 115: "Home", 119: "End", 116: "PageUp", 121: "PageDown",
+            122: "F1", 120: "F2", 99: "F3", 118: "F4", 96: "F5", 97: "F6", 98: "F7", 100: "F8",
+            101: "F9", 109: "F10", 103: "F11", 111: "F12", 105: "F13", 107: "F14", 113: "F15", 106: "F16", 64: "F17", 79: "F18", 80: "F19", 90: "F20"]
+        let name = specialNames[event.keyCode] ?? event.characters(byApplyingModifiers: [])?.uppercased() ?? "Key \(event.keyCode)"
+        settingsModel.shortcutPreview = label + name
         settingsModel.setShortcut(Shortcut(keyCode: UInt32(event.keyCode), modifiers: carbon, label: label + name))
         return true
     }
@@ -1519,7 +1604,7 @@ private final class JotBloomPanel: NSPanel {
 #endif
 
     override func sendEvent(_ event: NSEvent) {
-        if event.type == .keyDown, onSettingsKey?(event) == true { return }
+        if (event.type == .keyDown || event.type == .flagsChanged), onSettingsKey?(event) == true { return }
         switch event.type {
         case .keyDown: onKeyboardInteraction?()
         case .leftMouseDown, .rightMouseDown, .otherMouseDown,

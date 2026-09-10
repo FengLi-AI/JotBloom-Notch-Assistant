@@ -112,6 +112,71 @@ public extension JotBloomStore {
     }
 }
 
+/// First launch selects a directory before any business store or capture service exists.
+public struct InitialDataDirectorySetup {
+    public init() {}
+
+    public func needsSelection(location: DataLocationStore, previouslyUsed: Bool = false) throws -> Bool {
+        if try location.record() != nil {
+            _ = try location.activeDirectory() // Missing external disk is recovery, never a new install.
+            return false
+        }
+        let fm = FileManager.default
+        let control = location.controlDirectory
+        guard fm.fileExists(atPath: control.path) else {
+            if previouslyUsed { throw SettingsError.unavailableDirectory }
+            return true
+        }
+        let names = try fm.contentsOfDirectory(atPath: control.path)
+        if names.contains(DataDirectoryResolver.databaseFileName) {
+            try DataLocationStore.requireRegularFile(control.appendingPathComponent(DataDirectoryResolver.databaseFileName))
+            return false // Even an empty legacy database must be retained.
+        }
+        if previouslyUsed || names.contains(where: {
+            $0.hasPrefix("jotbloom.sqlite") || $0 == "data-identity" || $0.hasPrefix("data-migration") || $0 == "data-location-v1.json"
+        }) { throw SettingsError.unavailableDirectory }
+        return true
+    }
+
+    @discardableResult
+    public func create(in parent: URL, location: DataLocationStore,
+                       beforeCommit: () throws -> Void = {}) throws -> URL {
+        guard try needsSelection(location: location) else { throw SettingsError.invalidDirectory }
+        let fm = FileManager.default
+        guard parent.isFileURL else { throw SettingsError.invalidDirectory }
+        let parent = parent.standardizedFileURL.resolvingSymlinksInPath()
+        let values = try parent.resourceValues(forKeys: [.isDirectoryKey, .volumeIsLocalKey])
+        guard values.isDirectory == true, values.volumeIsLocal == true,
+              fm.isWritableFile(atPath: parent.path) else { throw SettingsError.invalidDirectory }
+        let target = parent.appendingPathComponent("JotBloom", isDirectory: true)
+        // Directory listing also detects dangling symlinks; never adopt an existing name.
+        guard !(try fm.contentsOfDirectory(atPath: parent.path)).contains("JotBloom"),
+              target != location.controlDirectory.standardizedFileURL.resolvingSymlinksInPath() else {
+            throw SettingsError.invalidDirectory
+        }
+        try fm.createDirectory(at: target, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
+        do {
+            let store = try JotBloomStore(dataDirectoryURL: target)
+            store.close()
+            let identity = UUID().uuidString
+            try DataLocationStore.durableWrite(Data(identity.utf8), to: target.appendingPathComponent("data-identity"))
+            try DataLocationStore.syncFile(target.appendingPathComponent(DataDirectoryResolver.databaseFileName))
+            try DataLocationStore.syncDirectory(target)
+            try DataLocationStore.syncDirectory(parent)
+            try location.validateIdentity(at: target, expected: identity)
+            try beforeCommit()
+            try location.commit(DataLocationRecord(activePath: target.path, previousPath: nil, identity: identity))
+            return target
+        } catch {
+            // Atomic replacement can succeed before fsync fails. Keep the committed directory.
+            if (try? location.record()?.activePath) == target.path { return target }
+            // No services have started and this invocation exclusively created the directory.
+            try? fm.removeItem(at: target)
+            throw error
+        }
+    }
+}
+
 public struct DataDirectoryMigration: Sendable {
     private let checkpoint: @Sendable (MigrationPhase) throws -> Void
     public init(checkpoint: @escaping @Sendable (MigrationPhase) throws -> Void = { _ in }) { self.checkpoint = checkpoint }

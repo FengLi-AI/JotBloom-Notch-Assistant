@@ -4,7 +4,7 @@
 
 一个为轻度创作和日常电脑办公设计的 Mac 屏幕顶部小工具：随手记录灵感、找回复制过的内容、收藏常用提示词，再与 AI 继续讨论想法。
 
-[访问官网](https://fengli-ai.github.io/JotBloom-Notch-Assistant/) · [下载 macOS 安装包](https://github.com/FengLi-AI/JotBloom-Notch-Assistant/releases/download/v1.0.0-preview.2/JotBloom-1.0.0-preview.2-universal.dmg) · [版本说明](https://github.com/FengLi-AI/JotBloom-Notch-Assistant/releases/tag/v1.0.0-preview.2) · [反馈 Bug / 建议](https://github.com/FengLi-AI/JotBloom-Notch-Assistant/issues)
+[访问官网](https://fengli-ai.github.io/JotBloom-Notch-Assistant/) · [下载 macOS 安装包](https://github.com/FengLi-AI/JotBloom-Notch-Assistant/releases/download/v1.0.0-preview.3/JotBloom-1.0.0-preview.3-universal.dmg) · [版本说明](https://github.com/FengLi-AI/JotBloom-Notch-Assistant/releases/tag/v1.0.0-preview.3) · [反馈 Bug / 建议](https://github.com/FengLi-AI/JotBloom-Notch-Assistant/issues)
 
 ![萌生灵感记录界面](site/assets/inspiration.png)
 
@@ -17,11 +17,13 @@
 - **一起搜索**：搜索灵感、剪贴板和提示词，再按结果分类查找。
 - **按习惯设置**：调整快捷键、顶部标签、默认入口和数据保存位置。
 
+本次更新：首次数据位置选择，以及快捷键录制预览、错误反馈与焦点修正。
+
 目前不包含文件中转站、跨设备同步或自动更新器。后续计划支持 Windows。
 
 ## 下载与安装
 
-当前版本为 **1.0.0-preview.2 公开预览版**，应用版本 1.0.0 / 构建 1102，安装包约 5.2 MB。
+当前版本为 **1.0.0-preview.3 公开预览版**，应用版本 1.0.0 / 构建 1103，安装包约 5.2 MB。
 
 1. 从上方链接下载 DMG，必要时对照 Releases 中的 `SHA256SUMS.txt` 校验。
 2. 打开 DMG，将 `萌生｜JotBloom.app` 拖到“应用程序”。
@@ -38,7 +40,7 @@
 
 无需配置 AI 即可使用本地记录、剪贴板、提示词管理和搜索。AI 功能需要自己的兼容接口及 API Key，第三方服务商可能收费。
 
-记录保存在本机，API Key 使用 macOS 钥匙串。AI 对话、自动命名、分类和整理会按功能需要将相应文本发送至你配置的服务。剪贴板监听默认开启，可随时关闭；请不要将敏感信息长期留在历史中。
+新用户首次启动先选择数据保存位置；已有用户升级保留原位置，仅卸载 App 后重装不会重复选择。记录保存在本机，API Key 使用 macOS 钥匙串。AI 对话、自动命名、分类和整理会按功能需要将相应文本发送至你配置的服务。剪贴板监听默认开启，可随时关闭；请不要将敏感信息长期留在历史中。
 
 更多说明：[数据与 AI](release/PRIVACY.md)。
 

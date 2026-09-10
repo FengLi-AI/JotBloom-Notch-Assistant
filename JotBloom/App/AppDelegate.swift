@@ -99,6 +99,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
 
         let appSettings = AppSettingsStore(defaults: settingsDefaults).load()
+        do {
+            if !settingsAreIsolated,
+               try InitialDataDirectorySetup().needsSelection(location: locationStore, previouslyUsed: appSettings.onboardingSeen),
+               !chooseInitialDataDirectory() { return }
+        } catch {
+            presentStartupStorageError(error)
+            return
+        }
         capturePermission.setAllowed(appSettings.monitoringEnabled)
 
         let dataDirectory: URL
@@ -1226,6 +1234,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 #endif
+
+    private func chooseInitialDataDirectory() -> Bool {
+        let picker = NSOpenPanel()
+        picker.title = "欢迎使用萌生 · 选择数据保存位置"
+        picker.message = "首次使用，请选择数据保存位置。萌生会在所选文件夹中创建独立的 JotBloom 文件夹，保存灵感、提示词、对话和剪贴板历史。之后可在设置中迁移。取消将退出，不会使用默认位置。"
+        picker.prompt = "选择并开始使用"
+        picker.canChooseFiles = false
+        picker.canChooseDirectories = true
+        picker.canCreateDirectories = true
+        picker.allowsMultipleSelection = false
+        NSApp.activate(ignoringOtherApps: true)
+        while picker.runModal() == .OK, let parent = picker.url {
+            do {
+                try InitialDataDirectorySetup().create(in: parent, location: locationStore)
+                return true
+            } catch {
+                let alert = NSAlert()
+                alert.messageText = "无法使用这个保存位置"
+                alert.informativeText = "请选择本机可写的文件夹，且其中不能已有 JotBloom 文件夹。不会覆盖或合并现有数据。\n" + error.localizedDescription
+                alert.addButton(withTitle: "重新选择")
+                alert.addButton(withTitle: "退出萌生")
+                if alert.runModal() != .alertFirstButtonReturn { break }
+            }
+        }
+        DispatchQueue.main.async { NSApp.terminate(nil) }
+        return false
+    }
 
     private func presentStartupStorageError(_ error: Error) {
         let alert = NSAlert()

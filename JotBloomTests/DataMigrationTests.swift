@@ -2,6 +2,77 @@ import Foundation
 import XCTest
 @testable import JotBloomCore
 
+final class InitialDataDirectorySetupTests: XCTestCase {
+    func testNewInstallInspectionDoesNotCreateDefaultStorage() throws {
+        let root = try TestTemporaryDirectory.make(); defer { TestTemporaryDirectory.remove(root) }
+        let control = root.appendingPathComponent("control")
+        XCTAssertTrue(try InitialDataDirectorySetup().needsSelection(location: .init(controlDirectory: control)))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: control.path))
+    }
+
+    func testSelectionCreatesOnlySelectedBusinessDirectoryAndSurvivesRestart() throws {
+        let root = try TestTemporaryDirectory.make(); defer { TestTemporaryDirectory.remove(root) }
+        let control = root.appendingPathComponent("control"), parent = root.appendingPathComponent("chosen")
+        try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: false)
+        let location = DataLocationStore(controlDirectory: control)
+        let target = try InitialDataDirectorySetup().create(in: parent, location: location)
+        XCTAssertEqual(target.lastPathComponent, "JotBloom")
+        XCTAssertEqual(try location.activeDirectory(), target)
+        XCTAssertFalse(try InitialDataDirectorySetup().needsSelection(location: location))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: control.appendingPathComponent("jotbloom.sqlite").path))
+        let store = try JotBloomStore(dataDirectoryURL: target, requireExisting: true); defer { store.close() }
+        XCTAssertEqual(try store.schemaVersionSynchronously(), 7)
+        XCTAssertTrue(try store.listRecentInspirationsSynchronously().isEmpty)
+    }
+
+    func testExistingEmptyLegacyDatabaseIsNotFirstInstall() throws {
+        let root = try TestTemporaryDirectory.make(); defer { TestTemporaryDirectory.remove(root) }
+        let store = try JotBloomStore(dataDirectoryURL: root); defer { store.close() }
+        XCTAssertFalse(try InitialDataDirectorySetup().needsSelection(location: .init(controlDirectory: root)))
+    }
+
+    func testPreviouslyUsedMissingDatabaseRequiresRecovery() throws {
+        let root = try TestTemporaryDirectory.make(); defer { TestTemporaryDirectory.remove(root) }
+        XCTAssertThrowsError(try InitialDataDirectorySetup().needsSelection(location: .init(controlDirectory: root.appendingPathComponent("missing")), previouslyUsed: true))
+        try Data("incomplete".utf8).write(to: root.appendingPathComponent("jotbloom.sqlite-wal"))
+        XCTAssertThrowsError(try InitialDataDirectorySetup().needsSelection(location: .init(controlDirectory: root)))
+    }
+
+    func testCorruptLocatorDoesNotStartNewSetup() throws {
+        let root = try TestTemporaryDirectory.make(); defer { TestTemporaryDirectory.remove(root) }
+        try Data("broken".utf8).write(to: root.appendingPathComponent("data-location-v1.json"))
+        XCTAssertThrowsError(try InitialDataDirectorySetup().needsSelection(location: .init(controlDirectory: root)))
+    }
+
+    func testExistingNamedDirectoryIsNeverOverwritten() throws {
+        let root = try TestTemporaryDirectory.make(); defer { TestTemporaryDirectory.remove(root) }
+        let target = root.appendingPathComponent("JotBloom")
+        try FileManager.default.createDirectory(at: target, withIntermediateDirectories: false)
+        let marker = target.appendingPathComponent("keep.txt")
+        try Data("keep".utf8).write(to: marker)
+        XCTAssertThrowsError(try InitialDataDirectorySetup().create(in: root, location: .init(controlDirectory: root.appendingPathComponent("control"))))
+        XCTAssertEqual(try String(contentsOf: marker), "keep")
+    }
+
+    func testFailureBeforeCommitDoesNotAdoptOrLeaveNewDatabase() throws {
+        let root = try TestTemporaryDirectory.make(); defer { TestTemporaryDirectory.remove(root) }
+        let location = DataLocationStore(controlDirectory: root.appendingPathComponent("control"))
+        XCTAssertThrowsError(try InitialDataDirectorySetup().create(in: root, location: location, beforeCommit: { throw SettingsError.migrationFailed }))
+        XCTAssertNil(try location.record())
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("JotBloom").path))
+        XCTAssertTrue(try InitialDataDirectorySetup().needsSelection(location: location))
+    }
+
+    func testMissingSelectedDirectoryNeverFallsBackToFirstInstall() throws {
+        let root = try TestTemporaryDirectory.make(); defer { TestTemporaryDirectory.remove(root) }
+        let location = DataLocationStore(controlDirectory: root.appendingPathComponent("control"))
+        let target = try InitialDataDirectorySetup().create(in: root, location: location)
+        try FileManager.default.moveItem(at: target, to: root.appendingPathComponent("unavailable"))
+        XCTAssertThrowsError(try InitialDataDirectorySetup().needsSelection(location: location))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: target.path))
+    }
+}
+
 final class DataMigrationTests: XCTestCase {
     func testWALImageDraftAndInspirationSurviveMigrationAndRestart() throws {
         let root = try TestTemporaryDirectory.make(); defer { TestTemporaryDirectory.remove(root) }

@@ -29,7 +29,20 @@ final class SettingsViewModel: ObservableObject {
     @Published private(set) var migrating = false
     @Published private(set) var choosingDirectory = false
     var blocksPanelInteraction: Bool { maintaining || choosingDirectory || confirmingClear }
-    @Published var recordingShortcut = false
+    @Published var recordingShortcut = false {
+        didSet {
+            guard oldValue != recordingShortcut else { return }
+            shortcutPreview = ""
+            onShortcutRecordingChanged?(recordingShortcut)
+        }
+    }
+    @Published var shortcutPreview = ""
+    var onShortcutRecordingChanged: ((Bool) -> Void)?
+    func toggleShortcutRecording() {
+        guard !busy else { return }
+        feedback = nil
+        recordingShortcut.toggle()
+    }
     @Published var showingOnboarding = false
     @Published var onboardingStep = 0
     @Published private(set) var loginEnabled = false
@@ -106,9 +119,9 @@ final class SettingsViewModel: ObservableObject {
     func restoreMenuPreference() { value.showMenuBarIcon = true; persist() }
     func setShortcut(_ shortcut: Shortcut) {
         guard !busy else { return }
-        recordingShortcut = false
         guard shortcut.isValid else { feedback = SettingsError.invalidShortcut.localizedDescription; return }
         guard onShortcut?(shortcut) == true else { feedback = "这个快捷键无法注册，原快捷键仍保留。"; return }
+        recordingShortcut = false
         value.shortcut = shortcut; persist(); feedback = "唤起快捷键已改为 \(shortcut.label)"
     }
     func setMonitoring(_ enabled: Bool) {

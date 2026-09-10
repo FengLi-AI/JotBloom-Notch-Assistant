@@ -42,11 +42,13 @@ struct SettingsControls: View {
             card {
                 Text("全局唤起快捷键").fontWeight(.medium)
                 HStack {
-                    Text(model.value.shortcut.label).font(.system(size: 15, design: .monospaced))
+                    Text(model.recordingShortcut ? (model.shortcutPreview.isEmpty ? "请按下组合键…" : model.shortcutPreview) : model.value.shortcut.label)
+                        .font(.system(size: 15, design: .monospaced))
                     Spacer()
-                    Button(model.recordingShortcut ? "按下新组合，Esc 取消" : "录制快捷键") { model.recordingShortcut.toggle() }
+                    Button(model.recordingShortcut ? "取消录制（Esc）" : "录制快捷键") { model.toggleShortcutRecording() }
                 }
-                note("新组合冲突时会保留旧快捷键；不要使用系统或文字编辑快捷键。")
+                note("请使用 Control、Option 或 Command 加一个按键，例如 ⌃⌥K；不支持仅 Shift 或 Z＋空格这样的两个普通键。")
+                note("⌘Space 通常用于 Spotlight，⌃Space 通常用于切换输入法，系统可能先接收它们。录制时如无完整反馈，请换一组；注册失败会保留旧快捷键。")
             }
             card {
                 Toggle("菜单栏显示图标", isOn: Binding(get: { model.value.showMenuBarIcon }, set: model.setMenuVisible))

@@ -75,7 +75,7 @@ targets:
         PRODUCT_MODULE_NAME: JotBloom
         EXECUTABLE_NAME: JotBloom
         MARKETING_VERSION: 1.0.0
-        CURRENT_PROJECT_VERSION: 1102
+        CURRENT_PROJECT_VERSION: 1103
         CODE_SIGN_STYLE: Automatic
         ENABLE_APP_SANDBOX: false
         ENABLE_HARDENED_RUNTIME: false
