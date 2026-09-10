@@ -411,13 +411,26 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         settingsModel.recordingShortcut = true
         debugSendKeyDown(keyCode: UInt16(kVK_Escape))
         passed = passed && !settingsModel.recordingShortcut && panelState.isSettingsOpen
-        for section in ["general", "tabs", "clipboard", "storage", "ai"] {
+        for section in ["general", "tabs", "clipboard", "storage", "ai", "systemPrompt", "about"] {
             panelState.settingsSection = section
             try await Task.sleep(nanoseconds: 180_000_000)
             guard let view = panel.contentView, let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return false }
             view.layoutSubtreeIfNeeded(); view.cacheDisplay(in: view.bounds, to: bitmap)
             if let data = bitmap.representation(using: .png, properties: [:]) { try data.write(to: output.appendingPathComponent(section + ".png")) }
             passed = passed && panelState.isExpanded && view.bounds.height > 300
+            if section == "about" {
+                func findScroll(_ node: NSView) -> NSScrollView? {
+                    if let scroll = node as? NSScrollView { return scroll }
+                    return node.subviews.lazy.compactMap { findScroll($0) }.first
+                }
+                if let scroll = findScroll(view), let document = scroll.documentView {
+                    scroll.contentView.scroll(to: NSPoint(x: 0, y: max(0, document.bounds.height - scroll.contentSize.height)))
+                    scroll.reflectScrolledClipView(scroll.contentView)
+                    try await Task.sleep(nanoseconds: 150_000_000)
+                    view.cacheDisplay(in: view.bounds, to: bitmap)
+                    if let data = bitmap.representation(using: .png, properties: [:]) { try data.write(to: output.appendingPathComponent("about-contacts.png")) }
+                }
+            }
         }
         closeSettings()
         passed = passed && !panelState.isSettingsOpen && !panelState.isExpanded

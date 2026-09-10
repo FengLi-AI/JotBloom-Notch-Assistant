@@ -11,7 +11,8 @@ struct PanelSettingsView: View {
                             ("clipboard", "剪贴板", "doc.on.clipboard"),
                             ("storage", "存储与隐私", "externaldrive"),
                             ("ai", "AI 接口", "sparkles"),
-                            ("systemPrompt", "系统提示词", "text.bubble")]
+                            ("systemPrompt", "系统提示词", "text.bubble"),
+                            ("about", "关于", "info.circle")]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -95,6 +96,8 @@ struct PanelSettingsView: View {
             if let model { SettingsControls(model: model, section: "storage") } else {
                 pending("更改保存位置", "尚未接入迁移服务。", symbol: "folder")
             }
+        case "about":
+            AboutSettingsView()
         case "systemPrompt":
             heading("系统提示词", "调整 AI 对话方式。保存后仅新会话生效，已有会话保持原设置。")
             if let model { SystemPromptEditor(model: model) }
@@ -114,6 +117,11 @@ struct PanelSettingsView: View {
             }
         default:
             heading("通用", "少一点打扰，多一点顺手。")
+            VStack(alignment: .leading, spacing: 8) {
+                Text("快捷操作").font(.system(size: 13, weight: .medium))
+                Text("\(model?.value.shortcut.label ?? "⌥Space")  呼出 / 收起\n⌘↓ / ⌘↑  展开 / 收回\n⌘F  搜索    ⌘,  设置    ⌘Q  退出\nEsc  先退出设置或详情，再收起面板")
+                    .font(.system(size: 11)).foregroundStyle(BloomTheme.muted).lineSpacing(7)
+            }.padding(16).frame(maxWidth: .infinity, alignment: .leading).modifier(BloomSurface(color: BloomTheme.well))
             defaultPicker
             Toggle(isOn: $state.preferences.reduceMotion) {
                 VStack(alignment: .leading, spacing: 5) {
@@ -126,11 +134,7 @@ struct PanelSettingsView: View {
             if let model { SettingsControls(model: model, section: "general") } else {
                 pending("开机自动启动", "尚未接入系统登录项。", symbol: "power")
             }
-            VStack(alignment: .leading, spacing: 8) {
-                Text("快捷操作").font(.system(size: 13, weight: .medium))
-                Text("\(model?.value.shortcut.label ?? "⌥Space")  呼出 / 收起\n⌘↓ / ⌘↑  展开 / 收回\n⌘F  搜索    ⌘,  设置    ⌘Q  退出\nEsc  先退出设置或详情，再收起面板")
-                    .font(.system(size: 11)).foregroundStyle(BloomTheme.muted).lineSpacing(7)
-            }.padding(16).frame(maxWidth: .infinity, alignment: .leading).modifier(BloomSurface(color: BloomTheme.well))
+
         }
     }
 
