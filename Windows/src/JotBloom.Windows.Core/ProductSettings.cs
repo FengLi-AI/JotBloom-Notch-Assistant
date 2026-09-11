@@ -7,8 +7,19 @@ namespace JotBloom.Windows.Core;
 public sealed record ModelConfiguration(string BaseUrl = "", string Model = "");
 public sealed record Hotkey(uint Key = 0x20, uint Modifiers = 3, string Label = "Ctrl+Alt+Space")
 {
+    public static Hotkey Default { get; } = new();
     public bool IsValid => Key is >= 0x20 and <= 0xFE && (Modifiers & ~7u) == 0 && (Modifiers & 3) != 0 &&
         Key is not (0x5B or 0x5C or 0x5D or 0x7B) && !(Modifiers == 2 && new uint[] { 0x41,0x43,0x56,0x58,0x5A,0x46,0x51,0x57,0x31,0x32,0x33,0x34,0x35,0x36 }.Contains(Key));
+}
+public static class ShortcutSettings
+{
+    public static void Apply(ProductSettings settings, Hotkey shortcut, Func<Hotkey, bool> register, Action<ProductSettings> save)
+    {
+        if (!shortcut.IsValid) throw new InvalidOperationException("请使用 Ctrl 或 Alt 加一个普通键。");
+        if (!register(shortcut)) throw new InvalidOperationException("这组快捷键被系统或其他应用占用，请换一组。原快捷键仍有效。");
+        try { save(settings with { Shortcut = shortcut }); }
+        catch { register(settings.Shortcut); throw; }
+    }
 }
 public sealed record ProductSettings
 {
@@ -21,7 +32,7 @@ public sealed record ProductSettings
     public bool ShowTrayIcon { get; init; } = true;
     public bool StartWithWindows { get; init; }
     public bool OnboardingSeen { get; init; }
-    public Hotkey Shortcut { get; init; } = new();
+    public Hotkey Shortcut { get; init; } = Hotkey.Default;
     public string DefaultPage { get; init; } = "input";
     public string[] TabOrder { get; init; } = ["input", "clipboard", "prompts", "inspirations", "chat", "search"];
     public ModelConfiguration Main { get; init; } = new();

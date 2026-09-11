@@ -78,6 +78,18 @@ enum StageSixSmokeRunner {
             checks.append(("shortcut_failure_preserves_old", model.value.shortcut == .standard))
             model.onShortcut = { _ in true }; model.setShortcut(.init(keyCode: 40, modifiers: 2048, label: "⌥K"))
             checks.append(("shortcut_success_persists", AppSettingsStore(defaults: defaults).load().shortcut.keyCode == 40))
+            model.recordingShortcut = true
+            model.onShortcut = { _ in false }; model.restoreDefaultShortcut()
+            checks.append(("shortcut_reset_conflict_preserves_custom", model.value.shortcut.keyCode == 40 && AppSettingsStore(defaults: defaults).load().shortcut.keyCode == 40))
+            checks.append(("shortcut_reset_stops_recording_on_failure", !model.recordingShortcut && model.feedback?.contains("原快捷键仍保留") == true))
+            var requestedDefault: Shortcut?
+            model.onShortcut = { requestedDefault = $0; return true }
+            model.recordingShortcut = true; model.shortcutPreview = "⌃"
+            model.restoreDefaultShortcut()
+            checks.append(("shortcut_reset_registers_and_persists_default", requestedDefault == .standard && model.value.shortcut == .standard && AppSettingsStore(defaults: defaults).load().shortcut == .standard))
+            checks.append(("shortcut_reset_clears_recording_and_preview", !model.recordingShortcut && model.shortcutPreview.isEmpty && model.feedback?.contains("已恢复默认") == true))
+            model.restoreDefaultShortcut()
+            checks.append(("shortcut_reset_repeat_is_safe", model.value.shortcut == .standard && AppSettingsStore(defaults: defaults).load().shortcut == .standard))
             model.onMenuVisibility = { _ in false }; model.setMenuVisible(false)
             checks.append(("menu_rescue_guard", model.value.showMenuBarIcon))
             model.setLogin(true); try await settle(model)

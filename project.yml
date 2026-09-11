@@ -74,8 +74,8 @@ targets:
         PRODUCT_NAME: 萌生｜JotBloom
         PRODUCT_MODULE_NAME: JotBloom
         EXECUTABLE_NAME: JotBloom
-        MARKETING_VERSION: 1.0.2
-        CURRENT_PROJECT_VERSION: 1104
+        MARKETING_VERSION: 1.0.3
+        CURRENT_PROJECT_VERSION: 1105
         CODE_SIGN_STYLE: Automatic
         ENABLE_APP_SANDBOX: false
         ENABLE_HARDENED_RUNTIME: false

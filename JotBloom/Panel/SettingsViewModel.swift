@@ -117,12 +117,19 @@ final class SettingsViewModel: ObservableObject {
         feedback = visible ? "菜单栏入口已显示。" : "菜单栏入口已隐藏，可用 \(value.shortcut.label) 呼出后进入设置。"
     }
     func restoreMenuPreference() { value.showMenuBarIcon = true; persist() }
-    func setShortcut(_ shortcut: Shortcut) {
-        guard !busy else { return }
-        guard shortcut.isValid else { feedback = SettingsError.invalidShortcut.localizedDescription; return }
-        guard onShortcut?(shortcut) == true else { feedback = "这个快捷键无法注册，原快捷键仍保留。"; return }
+    @discardableResult
+    func setShortcut(_ shortcut: Shortcut) -> Bool {
+        guard !busy else { return false }
+        guard shortcut.isValid else { feedback = SettingsError.invalidShortcut.localizedDescription; return false }
+        guard onShortcut?(shortcut) == true else { feedback = "这个快捷键无法注册，原快捷键仍保留。"; return false }
         recordingShortcut = false
         value.shortcut = shortcut; persist(); feedback = "唤起快捷键已改为 \(shortcut.label)"
+        return true
+    }
+    func restoreDefaultShortcut() {
+        guard !busy else { return }
+        recordingShortcut = false
+        if setShortcut(.standard) { feedback = "已恢复默认快捷键：\(Shortcut.standard.label)" }
     }
     func setMonitoring(_ enabled: Bool) {
         run { [self] in

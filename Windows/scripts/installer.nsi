@@ -5,7 +5,7 @@ Unicode true
 !include "x64.nsh"
 
 Name "萌生 · JotBloom"
-Caption "萌生 · JotBloom 1.0.2 测试版"
+Caption "萌生 · JotBloom 1.0.3 测试版"
 OutFile "${OUTPUT_FILE}"
 InstallDir "$LOCALAPPDATA\Programs\JotBloom"
 InstallDirRegKey HKCU "Software\JotBloom" "InstallLocation"
@@ -13,11 +13,11 @@ RequestExecutionLevel user
 SetCompressor /SOLID lzma
 SetCompressorDictSize 32
 BrandingText "给闪过的想法，一点空间。"
-VIProductVersion "1.0.2.1"
+VIProductVersion "1.0.3.1"
 VIAddVersionKey "ProductName" "萌生 · JotBloom"
 VIAddVersionKey "FileDescription" "JotBloom Windows 10 / 11 x64 Setup"
-VIAddVersionKey "FileVersion" "1.0.2 测试版"
-VIAddVersionKey "ProductVersion" "1.0.2 测试版"
+VIAddVersionKey "FileVersion" "1.0.3 测试版"
+VIAddVersionKey "ProductVersion" "1.0.3 测试版"
 VIAddVersionKey "LegalCopyright" "Copyright 2026 Li Fengli"
 !define MUI_ICON "${APP_ICON}"
 !define MUI_UNICON "${APP_ICON}"
@@ -82,7 +82,7 @@ Section "萌生客户端（必选）" Main
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   WriteRegStr HKCU "Software\JotBloom" "InstallLocation" "$INSTDIR"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\JotBloom" "DisplayName" "萌生 · JotBloom"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\JotBloom" "DisplayVersion" "1.0.2 测试版"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\JotBloom" "DisplayVersion" "1.0.3 测试版"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\JotBloom" "Publisher" "Li Fengli"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\JotBloom" "InstallLocation" "$INSTDIR"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\JotBloom" "DisplayIcon" "$INSTDIR\JotBloom.exe"

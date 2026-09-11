@@ -1,6 +1,6 @@
 # 萌生 Windows 客户端
 
-版本：**1.0.2 测试版**。适配 Windows 10 22H2 / Windows 11，Intel / AMD x64。
+版本：**1.0.3 测试版**。适配 Windows 10 22H2 / Windows 11，Intel / AMD x64。
 
 基于 C#、.NET 10、WPF 和 Win32，提供灵感记录、剪贴板、提示词、灵感库、AI 对话、搜索及设置。鼠标紧贴屏幕顶部中央 300 DIP 宽的区域后出现提示条，点击呼出主面板；默认快捷键 `Ctrl+Alt+Space` 可直接呼出。
 

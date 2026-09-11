@@ -113,5 +113,26 @@ Check("rapid direction changes remain bounded and reach final target", () => {
     }
     m.SetVisible(true, 100); Require(m.Sample(240) == 1 && m.IsComplete);
 });
+Check("restore shortcut persists default and preserves other settings", () => {
+    string dir=Path.Combine(Path.GetTempPath(),"jotbloom-shortcut-"+Guid.NewGuid());
+    try {
+        var file=new SettingsFile(Path.Combine(dir,"settings.json"));
+        var old=new ProductSettings{Shortcut=new(0x4B,3,"Ctrl+Alt+K"),ShowTrayIcon=false,DefaultPage="prompts"};file.Save(old);
+        Hotkey? registered=null;
+        ShortcutSettings.Apply(old,Hotkey.Default,key=>{registered=key;return true;},file.Save);
+        var saved=file.Load();Require(registered==Hotkey.Default&&saved.Shortcut==Hotkey.Default&&!saved.ShowTrayIcon&&saved.DefaultPage=="prompts");
+        ShortcutSettings.Apply(saved,Hotkey.Default,_=>true,file.Save);Require(file.Load().Shortcut==Hotkey.Default);
+    } finally {if(Directory.Exists(dir))Directory.Delete(dir,true);}
+});
+Check("restore shortcut conflict leaves custom shortcut and settings intact", () => {
+    var old=new ProductSettings{Shortcut=new(0x4B,3,"Ctrl+Alt+K")};bool saved=false,failed=false;
+    try {ShortcutSettings.Apply(old,Hotkey.Default,_=>false,_=>saved=true);}catch(InvalidOperationException){failed=true;}
+    Require(failed&&!saved&&old.Shortcut.Key==0x4B);
+});
+Check("restore shortcut save failure re-registers original combination", () => {
+    var old=new ProductSettings{Shortcut=new(0x4B,3,"Ctrl+Alt+K")};var registrations=new List<Hotkey>();bool failed=false;
+    try {ShortcutSettings.Apply(old,Hotkey.Default,key=>{registrations.Add(key);return true;},_=>throw new IOException("fixture"));}catch(IOException){failed=true;}
+    Require(failed&&registrations.SequenceEqual(new[]{Hotkey.Default,old.Shortcut}));
+});
 passed+=await AiContracts.Run();
 Console.WriteLine($"Passed {passed} contract checks; Windows UI not exercised.");

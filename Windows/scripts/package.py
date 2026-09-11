@@ -28,7 +28,7 @@ config = json.loads((publish / "JotBloom.runtimeconfig.json").read_text())
 assert config["runtimeOptions"].get("includedFrameworks"), "Runtime must be self-contained"
 shutil.copy(root.parent / "LICENSE", publish / "LICENSE.txt")
 shutil.copytree(root / "licenses", publish / "licenses", dirs_exist_ok=True)
-(publish / "JotBloom-installed.txt").write_text("JotBloom Windows 1.0.2\n", encoding="utf-8")
+(publish / "JotBloom-installed.txt").write_text("JotBloom Windows 1.0.3\n", encoding="utf-8")
 files = sorted(p for p in publish.rglob("*") if p.is_file() and not p.name.startswith("._") and p.name != "payload-sha256.json")
 for path in files:
     assert path.suffix.lower() not in [".sqlite", ".db", ".pdb"], f"Unexpected payload: {path.name}"
@@ -41,7 +41,7 @@ uninstall = output / "uninstall-files.nsh"
 directories = sorted((p for p in publish.rglob("*") if p.is_dir()), key=lambda p: len(p.parts), reverse=True)
 uninstall.write_text("\n".join([f'Delete "$INSTDIR\\{quote_relative(p)}"' for p in files] +
                                [f'RMDir "$INSTDIR\\{quote_relative(p)}"' for p in directories])+"\n")
-installer = output / "JotBloom-1.0.2-Windows-x64-Setup.exe"
+installer = output / "JotBloom-1.0.3-Windows-x64-Setup.exe"
 subprocess.run(["makensis", "-WX", "-V3", f"-DPUBLISH_DIR={publish}", f"-DOUTPUT_FILE={installer}",
                 f"-DAPP_ICON={root / 'src/JotBloom.Windows.Desktop/Assets/JotBloom.ico'}",
                 f"-DUNINSTALL_FILES={uninstall}", f"-DINSTALL_KB={sum(p.stat().st_size for p in files)//1024}",

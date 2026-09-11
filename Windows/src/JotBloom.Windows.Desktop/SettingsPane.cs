@@ -47,8 +47,11 @@ internal sealed class SettingsPane:BloomPage
     {
         var shortcut=Ui.Text(Runtime.Settings.Shortcut.Label,15,BloomTheme.Blue);
         recordButton=Ui.Button("录制快捷键",()=>{recording=true;candidate=null;recordButton!.Content="请按 Ctrl / Alt 加另一个键…";recordButton.Focus();return Task.CompletedTask;});
-        var apply=Ui.Button("应用快捷键",()=>Run(()=>{if(candidate is null)throw new InvalidOperationException("先录制一组快捷键。");var old=Runtime.Settings.Shortcut;if(Runtime.RegisterShortcut?.Invoke(candidate)!=true)throw new InvalidOperationException("这组快捷键被系统或其他应用占用，请换一组。原快捷键仍有效。");try{Runtime.SaveSettings(Runtime.Settings with{Shortcut=candidate});}catch{Runtime.RegisterShortcut?.Invoke(old);throw;}shortcut.Text=candidate.Label;Feedback.Text="快捷键已更新";return Task.CompletedTask;}));
-        Card("快捷操作",shortcut,Ui.Row(recordButton,apply),Ui.Text("Ctrl+↓ / Ctrl+↑ 展开 / 收回\nCtrl+F 搜索 · Ctrl+, 设置 · Ctrl+Q 退出\nEsc 先返回列表或退出设置，再收起面板\nCtrl+1…6 切换顶部标签",12,BloomTheme.Muted));
+        var apply=Ui.Button("应用快捷键",()=>Run(()=>{if(candidate is null)throw new InvalidOperationException("先录制一组快捷键。");ApplyShortcut(candidate);Feedback.Text="快捷键已更新";return Task.CompletedTask;}));
+        var reset=Ui.Button("恢复默认",()=>Run(()=>{StopRecording();candidate=null;ApplyShortcut(Hotkey.Default);Feedback.Text="已恢复默认快捷键："+Hotkey.Default.Label;return Task.CompletedTask;}));
+        reset.ToolTip="恢复为 Ctrl+Alt+Space，并立即保存";
+        void ApplyShortcut(Hotkey value){ShortcutSettings.Apply(Runtime.Settings,value,key=>Runtime.RegisterShortcut?.Invoke(key)==true,Runtime.SaveSettings);shortcut.Text=value.Label;StopRecording();candidate=null;}
+        Card("快捷操作",shortcut,Ui.Row(recordButton,apply,reset),Ui.Text("Ctrl+↓ / Ctrl+↑ 展开 / 收回\nCtrl+F 搜索 · Ctrl+, 设置 · Ctrl+Q 退出\nEsc 先返回列表或退出设置，再收起面板\nCtrl+1…6 切换顶部标签",12,BloomTheme.Muted));
         Card("通用",Toggle("显示系统托盘图标",Runtime.Settings.ShowTrayIcon,v=>{Runtime.SetTrayVisible?.Invoke(v);try{Runtime.SaveSettings(Runtime.Settings with{ShowTrayIcon=v});}catch{Runtime.SetTrayVisible?.Invoke(!v);throw;}}),
             Toggle("开机自动启动",Runtime.Settings.StartWithWindows,v=>{AutoStart.Set(v);try{Runtime.SaveSettings(Runtime.Settings with{StartWithWindows=v});}catch{AutoStart.Set(!v);throw;}}),
             Toggle("减少动效",Runtime.Settings.ReduceMotion,v=>Runtime.SaveSettings(Runtime.Settings with{ReduceMotion=v})),Ui.Text("默认打开",12,BloomTheme.Muted),

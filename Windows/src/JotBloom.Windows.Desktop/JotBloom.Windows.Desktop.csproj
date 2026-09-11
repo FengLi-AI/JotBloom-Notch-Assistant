@@ -7,11 +7,11 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <UseAppHost>true</UseAppHost>
     <AssemblyName>JotBloom</AssemblyName>
-    <Version>1.0.2</Version>
-    <InformationalVersion>1.0.2 测试版</InformationalVersion>
+    <Version>1.0.3</Version>
+    <InformationalVersion>1.0.3 测试版</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
-    <FileVersion>1.0.2.1</FileVersion>
-    <AssemblyVersion>1.0.2.0</AssemblyVersion>
+    <FileVersion>1.0.3.1</FileVersion>
+    <AssemblyVersion>1.0.3.0</AssemblyVersion>
     <Product>萌生 · JotBloom</Product>
     <Company>FengLi-AI</Company>
     <ApplicationIcon>Assets/JotBloom.ico</ApplicationIcon>

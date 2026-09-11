@@ -46,6 +46,8 @@ struct SettingsControls: View {
                         .font(.system(size: 15, design: .monospaced))
                     Spacer()
                     Button(model.recordingShortcut ? "取消录制（Esc）" : "录制快捷键") { model.toggleShortcutRecording() }
+                    Button("恢复默认") { model.restoreDefaultShortcut() }
+                        .help("恢复为 Option + Space，并立即保存")
                 }
                 note("请使用 Control、Option 或 Command 加一个按键，例如 ⌃⌥K；不支持仅 Shift 或 Z＋空格这样的两个普通键。")
                 note("⌘Space 通常用于 Spotlight，⌃Space 通常用于切换输入法，系统可能先接收它们。录制时如无完整反馈，请换一组；注册失败会保留旧快捷键。")

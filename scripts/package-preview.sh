@@ -4,7 +4,7 @@ set -euo pipefail
 umask 022
 export COPYFILE_DISABLE=1
 app_name='萌生｜JotBloom.app'
-package_name='JotBloom-1.0.2-universal.dmg'
+package_name='JotBloom-1.0.3-universal.dmg'
 project_dir="$(cd "$(dirname "$0")/.." && pwd)"
 output_dir="${1:?Usage: bash scripts/package-preview.sh NEW_ABSOLUTE_OUTPUT_DIRECTORY}"
 case "$output_dir" in /*) ;; *) echo 'Output must be an absolute path.' >&2; exit 2;; esac
@@ -17,11 +17,11 @@ mount_dir="$(mktemp -d /tmp/jotbloom-release-mount.XXXXXX)"
 mounted=0
 cleanup() { if [ "$mounted" -eq 1 ]; then hdiutil detach "$mount_dir" >/dev/null || true; fi; }
 trap cleanup EXIT
-echo 'Building v1.0.2 (1.0.2 build 1104); does not publish automatically.'
+echo 'Building v1.0.3 (1.0.3 build 1105); does not publish automatically.'
 xcodebuild -project "$project_dir/JotBloom.xcodeproj" -scheme JotBloom \
   -configuration Release -destination 'generic/platform=macOS' -derivedDataPath "$build_dir" \
   ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- \
-  MARKETING_VERSION=1.0.2 CURRENT_PROJECT_VERSION=1104 build > "$output_dir/build.log" 2>&1
+  MARKETING_VERSION=1.0.3 CURRENT_PROJECT_VERSION=1105 build > "$output_dir/build.log" 2>&1
 app="$build_dir/Build/Products/Release/$app_name"
 codesign --verify --deep --strict --verbose=2 "$app" > "$output_dir/signature.log" 2>&1
 lipo -archs "$app/Contents/MacOS/JotBloom" > "$output_dir/architectures.txt"
