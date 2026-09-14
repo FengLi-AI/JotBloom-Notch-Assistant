@@ -40,9 +40,10 @@ def quote_relative(path):
 uninstall = output / "uninstall-files.nsh"
 directories = sorted((p for p in publish.rglob("*") if p.is_dir()), key=lambda p: len(p.parts), reverse=True)
 uninstall.write_text("\n".join([f'Delete "$INSTDIR\\{quote_relative(p)}"' for p in files] +
-                               [f'RMDir "$INSTDIR\\{quote_relative(p)}"' for p in directories])+"\n")
+                               [f'RMDir "$INSTDIR\\{quote_relative(p)}"' for p in directories])+"\n", encoding="utf-8-sig")
 installer = output / "JotBloom-1.0.4-Windows-x64-Setup.exe"
-subprocess.run(["makensis", "-WX", "-V3", f"-DPUBLISH_DIR={publish}", f"-DOUTPUT_FILE={installer}",
+subprocess.run(["makensis", "-WX", "-V3", "-INPUTCHARSET", "UTF8", f"-DPUBLISH_DIR={publish}", f"-DOUTPUT_FILE={installer}",
+                f"-DPAYLOAD_GLOB={publish / '*'}", f"-DLICENSE_FILE={publish / 'LICENSE.txt'}",
                 f"-DAPP_ICON={root / 'src/JotBloom.Windows.Desktop/Assets/JotBloom.ico'}",
                 f"-DUNINSTALL_FILES={uninstall}", f"-DINSTALL_KB={sum(p.stat().st_size for p in files)//1024}",
                 str(root / "scripts/installer.nsi")], check=True)
