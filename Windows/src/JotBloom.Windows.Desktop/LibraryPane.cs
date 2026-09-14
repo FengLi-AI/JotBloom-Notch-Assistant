@@ -32,12 +32,13 @@ internal sealed class LibraryPane:BloomPage
         this.kind=kind;autosave=new(SaveDetail,e=>Feedback.Text=Ui.Error(e));
         RowDefinitions.Add(new(){Height=GridLength.Auto});RowDefinitions.Add(new(){Height=new GridLength(1,GridUnitType.Star)});RowDefinitions.Add(new(){Height=GridLength.Auto});
         if(kind==LibraryKind.Inspirations){
-            libraryList.ColumnDefinitions.Add(new(){Width=new GridLength(100)});libraryList.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});
+            libraryList.ColumnDefinitions.Add(new(){Width=new GridLength(132)});libraryList.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});
             foreach(string value in new[]{"全部"}.Concat(BloomStore.Categories)){string label=value.Replace("类","");string icon=label switch{"全部"=>"layout-grid","文章"=>"file-text","作品"=>"palette","产品"=>"box",_=>"bulb"};categoryNav.Add(value,label,icon,()=>Run(async()=>{categoryFilter=value=="全部"?null:value;categoryNav.Select(value);await Refresh();BloomTheme.Enter(list);}));}
             categoryNav.Select("全部");libraryList.Children.Add(Ui.Scroll(Ui.Nav(categoryNav)));Grid.SetColumn(list,1);
         }
         if(kind==LibraryKind.Prompts){tools.Children.Add(Ui.Button("新建提示词",()=>Run(NewPrompt)));var favorite=new CheckBox{Content="只看常用",Foreground=BloomTheme.Text,Margin=new Thickness(10),VerticalAlignment=VerticalAlignment.Center};favorite.Checked+=async(_,_)=>{favorites=true;await Run(()=>Refresh());};favorite.Unchecked+=async(_,_)=>{favorites=false;await Run(()=>Refresh());};tools.Children.Add(favorite);}
         tools.Children.Add(Ui.Button("刷新",()=>Run(()=>Refresh())));Children.Add(tools);
+        Feedback.Text=kind==LibraryKind.Clipboard?"左键复制并收起 · 右键复制保留面板":"点击查看 · 右键管理记录";
         libraryList.Children.Add(list);content.Children.Add(libraryList);Grid.SetRow(content,1);Children.Add(content);
         var footer=new StackPanel();more=Ui.Button("加载更多",()=>Run(()=>Refresh(true)));undo=Ui.Button("撤销删除",()=>Run(Undo));undo.Visibility=Visibility.Collapsed;
         footer.Children.Add(Ui.Row(more,undo));footer.Children.Add(Feedback);Grid.SetRow(footer,2);Children.Add(footer);
