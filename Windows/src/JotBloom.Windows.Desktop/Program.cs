@@ -20,10 +20,11 @@ internal static class Program
     {
         if(!Environment.Is64BitProcess||!OperatingSystem.IsWindowsVersionAtLeast(10,0,19045)){MessageBox.Show("萌生需要 Windows 10 22H2 或 Windows 11 的 64 位系统。","萌生");return;}
         Native.SetProcessDpiAwarenessContext(new IntPtr(-4));
+        if(args.Length==2&&args[0]=="--ui-smoke"){Environment.Exit(WindowsUiSmoke.Run(args[1]));return;}
         using var activation=new EventWaitHandle(false,EventResetMode.AutoReset,InstanceName+".Activate");
         using var mutex=new Mutex(true,InstanceName,out bool first);
         if(!first){activation.Set();return;}
-        var app=new Application{ShutdownMode=ShutdownMode.OnExplicitShutdown};
+        var app=new Application{ShutdownMode=ShutdownMode.OnExplicitShutdown};BloomControls.Install();
         EntryHost? host=null;BloomStore? store=null;AppRuntime? runtime=null;
         app.Startup+=async(_,_)=>{
             try{
@@ -94,7 +95,7 @@ internal sealed class EntryHost : IDisposable
         hint.Clicked += () => { if (state.ClickHint()) Render(); };
         panel.HideRequested += () => HidePanel(true);
         panel.Closing += (_, e) => { if (!disposed) { e.Cancel = true;_ = panel.RequestHideAsync(); } };
-        panel.ExpansionRequested += () => { if (state.Display is DisplayArea d) panel.Position(TopEdgeGeometry.Panel(d, panel.Expanded)); };
+        panel.ExpansionRequested += () => { if (state.Display is DisplayArea d) panel.ResizeTo(TopEdgeGeometry.Panel(d, panel.Expanded)); };
         panel.Deactivated += (_, _) => app.Dispatcher.InvokeAsync(async()=>{if(!switching&&!panel.IsActive&&runtime.FocusGuards==0&&!runtime.Maintenance&&state.State==EntryState.PanelVisible)await HideAfterFlush(false);},DispatcherPriority.Background);
         SystemEvents.SessionSwitch += SessionChanged;
         SystemEvents.PowerModeChanged += PowerChanged;

@@ -43,7 +43,9 @@ internal static class PrivateDirectory
 }
 internal sealed class AppRuntime:IDisposable
 {
-    internal const string Version="1.0.2 测试版";
+    internal Func<string,FrameworkElement,Task>? ChangeAppearance;
+    internal Func<Task>? HidePanel;
+    internal const string Version="1.0.4 测试版";
     internal readonly BloomStore Store;
     internal readonly DataLocation Location;
     internal readonly CredentialVault Vault;
@@ -85,7 +87,7 @@ internal sealed class AppRuntime:IDisposable
         async Task RemoveWhenDone(Task pending){try{await pending;}finally{aiTasks.Remove(pending);}}
         async Task Run(){var token=aiGeneration.Token;bool entered=false;
             try{await aiSlots.WaitAsync(token);entered=true;token.ThrowIfCancellationRequested();string key=Vault.Read(resolved.KeySlot);
-                string instruction=item.Kind==LibraryKind.Inspirations?AiPrompts.Rules+"\n"+AiPrompts.Inspiration:AiPrompts.PromptTitle;
+                string instruction=item.Kind==LibraryKind.Inspirations?AiPrompts.Rules+"\n"+AiPrompts.Inspiration:AiPrompts.Rules+"\n"+AiPrompts.PromptTitle;
                 string answer=await Ai.CompleteAsync(resolved.Configuration,key,[new("system",instruction),new("user",TextRules.Prefix(item.Content,2000))],token);
                 token.ThrowIfCancellationRequested();string? title,category=null;
                 if(item.Kind==LibraryKind.Inspirations){using var json=JsonDocument.Parse(answer);title=json.RootElement.TryGetProperty("title",out var t)?t.GetString()?.Trim():null;category=json.RootElement.TryGetProperty("category",out var c)?c.GetString():null;

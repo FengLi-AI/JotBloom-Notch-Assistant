@@ -9,13 +9,15 @@ namespace JotBloom.Windows.Desktop;
 
 internal static class Ui
 {
-    internal static TextBlock Text(string text,int size=13,Brush? color=null)=>new(){Text=text,FontSize=size,Foreground=color??BloomTheme.Text,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,3,0,3)};
-    internal static TextBox Editor(string label,bool multiline=true)=>Named(new TextBox{AcceptsReturn=multiline,TextWrapping=multiline?TextWrapping.Wrap:TextWrapping.NoWrap,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,Background=BloomTheme.Well,Foreground=BloomTheme.Text,CaretBrush=BloomTheme.Blue,BorderBrush=BloomTheme.Raised,BorderThickness=new Thickness(1),Padding=new Thickness(10),FontSize=14,MinHeight=34},label);
+    internal static TextBlock Text(string text,int size=13,Brush? color=null)=>new(){Text=text,FontSize=size,Foreground=color??BloomTheme.Text,TextWrapping=TextWrapping.Wrap,FontFamily=BloomTheme.BodyFont,FontWeight=FontWeight.FromOpenTypeWeight(350),Margin=new Thickness(0,3,0,3)};
+    internal static TextBox Editor(string label,bool multiline=true)=>Named(new TextBox{AcceptsReturn=multiline,TextWrapping=multiline?TextWrapping.Wrap:TextWrapping.NoWrap,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,Background=BloomTheme.Well,Foreground=BloomTheme.Text,CaretBrush=BloomTheme.Blue,BorderBrush=BloomTheme.Stroke,BorderThickness=new Thickness(.5),Padding=new Thickness(14),FontFamily=BloomTheme.BodyFont,FontWeight=FontWeight.FromOpenTypeWeight(350),FontSize=14,MinHeight=34},label);
     private static T Named<T>(T view,string label)where T:FrameworkElement{AutomationProperties.SetName(view,label);return view;}
     internal static Button Button(string title,Func<Task> action)=>Wire(PanelWindow.Button(title),action);
+    internal static BloomButton Accent(string title,string icon,string tone,Func<Task> action){var b=new BloomButton(title){Icon=icon,Accent=tone};b.Click+=async(_,_)=>await action();return b;}
+    internal static Border Nav(BloomNavigation nav)=>new(){Child=nav,Background=BloomTheme.Selected,CornerRadius=new CornerRadius(20),VerticalAlignment=VerticalAlignment.Top,Margin=new Thickness(0,0,16,0)};
     private static Button Wire(Button b,Func<Task> action){b.Click+=async(_,_)=>await action();return b;}
     internal static StackPanel Row(params UIElement[] views){var row=new StackPanel{Orientation=Orientation.Horizontal};foreach(var v in views)row.Children.Add(v);return row;}
-    internal static Border Card(UIElement content)=>new(){Child=content,Padding=new Thickness(14),Margin=new Thickness(0,0,0,12),CornerRadius=new CornerRadius(18),Background=BloomTheme.Well};
+    internal static Border Card(UIElement content)=>new(){Child=content,Padding=new Thickness(16),Margin=new Thickness(0,0,0,16),CornerRadius=new CornerRadius(20),Background=BloomTheme.Well,BorderBrush=BloomTheme.Stroke,BorderThickness=new Thickness(.5)};
     internal static ScrollViewer Scroll(UIElement content)=>new(){Content=content,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled};
     internal static string Error(Exception e)=>e switch{AiException or ArgumentException or InvalidOperationException or JotBloom.Windows.Storage.DuplicateInspirationException=>e.Message,OperationCanceledException=>"操作已停止或超时，当前输入已保留。",System.Net.Http.HttpRequestException=>"无法连接服务，请检查网络和接口地址。",System.Text.Json.JsonException=>"返回内容或配置格式无效，请检查后重试。",_=>"操作未完成，请检查存储磁盘、权限或网络后重试。当前输入已保留。"};
 }
@@ -44,7 +46,8 @@ internal abstract class BloomPage:Grid
 {
     protected readonly AppRuntime Runtime;
     internal readonly TextBlock Feedback=Ui.Text("",12,BloomTheme.Muted);
-    protected BloomPage(AppRuntime runtime){Runtime=runtime;Margin=new Thickness(14);}
+    protected BloomPage(AppRuntime runtime){Runtime=runtime;Margin=new Thickness(0);Feedback.VerticalAlignment=VerticalAlignment.Bottom;Feedback.Margin=new Thickness(0,8,46,0);}
+    internal virtual void SetExpanded(bool expanded){}
     internal virtual Task ActivateAsync()=>Task.CompletedTask;
     internal virtual Task FlushAsync()=>Task.CompletedTask;
     internal virtual Task<bool> BackAsync()=>Task.FromResult(false);

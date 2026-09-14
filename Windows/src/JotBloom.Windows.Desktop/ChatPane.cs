@@ -32,8 +32,8 @@ internal sealed class ChatPane:BloomPage
         var delete=Ui.Button("删除对话",()=>Run(async()=>{if(session is null||!Runtime.Confirm("删除这个会话及其消息？此操作不可撤销。"))return;await StopAsync();await FlushAsync();await Runtime.Store.DeleteSessionAsync(session.Id);session=await Runtime.Store.CurrentSessionAsync(Runtime.Settings.SystemPrompt);await Load();}));
         var historyMore=Ui.Button("更多历史",()=>Run(async()=>{historyOffset+=50;var next=await Runtime.Store.SessionsAsync(historyOffset);loading=true;foreach(var item in next)sessions.Items.Add(Display(item));loading=false;if(next.Count==0)Feedback.Text="没有更多历史会话。";}));
         Children.Add(Ui.Row(newChat,sessions,historyMore,delete));scroll=Ui.Scroll(messages);Grid.SetRow(scroll,1);Children.Add(scroll);Grid.SetRow(input,2);Children.Add(input);
-        send=Ui.Button("发送  Ctrl+Enter",()=>Run(async()=>{await Start(false,null);}));stop=Ui.Button("停止",()=>Run(StopAsync));retry=Ui.Button("重试最后一轮",()=>Run(async()=>{await Start(false,turns.LastOrDefault());}));summary=Ui.Button("整理为灵感",()=>Run(Summarize));
-        var bottom=new StackPanel();bottom.Children.Add(Ui.Row(send,stop,retry,summary));bottom.Children.Add(Feedback);Grid.SetRow(bottom,3);Children.Add(bottom);
+        send=Ui.Accent("发送","arrow-up","blue",()=>Run(async()=>{await Start(false,null);}));stop=Ui.Button("停止",()=>Run(StopAsync));retry=Ui.Button("重试最后一轮",()=>Run(async()=>{await Start(false,turns.LastOrDefault());}));summary=Ui.Accent("整理成灵感","sparkles","blue",()=>Run(Summarize));
+        var bottom=new StackPanel{Margin=new Thickness(0,12,42,0)};bottom.Children.Add(Ui.Row(send,stop,retry,summary));bottom.Children.Add(Feedback);Grid.SetRow(bottom,3);Children.Add(bottom);
         input.TextChanged+=(_,_)=>{if(!loading)draft.Changed();};TextCompositionManager.AddPreviewTextInputStartHandler(input,(_,_)=>composing=true);TextCompositionManager.AddPreviewTextInputHandler(input,(_,_)=>composing=false);
         input.PreviewKeyDown+=async(_,e)=>{if(e.Key==Key.Enter&&Keyboard.Modifiers==ModifierKeys.Control&&!composing){e.Handled=true;await Run(async()=>{await Start(false,null);});}};
         sessions.SelectionChanged+=async(_,_)=>{if(loading||sessions.SelectedItem is not SessionLabel label||session?.Id==label.Id)return;await Run(async()=>{await StopAsync();await FlushAsync();session=await Runtime.Store.SelectSessionAsync(label.Id);await Load();});};
@@ -49,7 +49,7 @@ internal sealed class ChatPane:BloomPage
     }
     private TextBox RenderTurn(ChatTurn turn)
     {
-        messages.Children.Add(Ui.Card(Ui.Text("你\n"+turn.User,13)));
+        var bubble=Ui.Card(Ui.Text(turn.User,13));bubble.Background=BloomTheme.Bubble;bubble.HorizontalAlignment=HorizontalAlignment.Right;bubble.MaxWidth=470;messages.Children.Add(bubble);
         var answer=Ui.Editor("AI 回复");answer.IsReadOnly=true;answer.Text=turn.Answer;answer.MinHeight=40;answer.MaxHeight=double.PositiveInfinity;answer.Background=BloomTheme.Surface;
         var card=new StackPanel();card.Children.Add(Ui.Text("萌生 · "+StateLabel(turn.State),11,BloomTheme.Blue));card.Children.Add(answer);if(turn.Error is not null)card.Children.Add(Ui.Text(turn.Error,11,BloomTheme.Muted));messages.Children.Add(Ui.Card(card));return answer;
     }
@@ -108,6 +108,6 @@ internal sealed class SummaryDialog:Window
         Title="检查整理结果后保存";Width=580;Height=500;Background=BloomTheme.Surface;Foreground=BloomTheme.Text;WindowStartupLocation=WindowStartupLocation.CenterScreen;Topmost=true;
         var grid=new Grid{Margin=new Thickness(20)};grid.RowDefinitions.Add(new(){Height=GridLength.Auto});grid.RowDefinitions.Add(new(){Height=new GridLength(1,GridUnitType.Star)});grid.RowDefinitions.Add(new(){Height=GridLength.Auto});title.Text=heading;body.Text=text;grid.Children.Add(title);Grid.SetRow(body,1);grid.Children.Add(body);
         var feedback=Ui.Text("",12,BloomTheme.Muted);bool saving=false;Closing+=(_,e)=>{if(saving)e.Cancel=true;};
-        var actions=Ui.Row(category,Ui.Button("保存灵感",async()=>{if(saving)return;saving=true;IsEnabled=false;try{await save(TitleText,BodyText,Category);saving=false;DialogResult=true;}catch(Exception e){feedback.Text=Ui.Error(e);}finally{saving=false;IsEnabled=true;}}),Ui.Button("取消",()=>{DialogResult=false;return Task.CompletedTask;}));var bottom=new StackPanel();bottom.Children.Add(actions);bottom.Children.Add(feedback);Grid.SetRow(bottom,2);grid.Children.Add(bottom);Content=grid;
+        var actions=Ui.Row(category,Ui.Button("保存灵感",async()=>{if(saving)return;saving=true;IsEnabled=false;try{await save(TitleText,BodyText,Category);saving=false;DialogResult=true;}catch(Exception e){feedback.Text=Ui.Error(e);}finally{saving=false;IsEnabled=true;}}),Ui.Button("取消",()=>{DialogResult=false;return Task.CompletedTask;}));var bottom=new StackPanel{Margin=new Thickness(0,12,42,0)};bottom.Children.Add(actions);bottom.Children.Add(feedback);Grid.SetRow(bottom,2);grid.Children.Add(bottom);Content=grid;
     }
 }

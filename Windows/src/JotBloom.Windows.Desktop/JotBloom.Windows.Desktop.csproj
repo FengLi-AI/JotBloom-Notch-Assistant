@@ -7,11 +7,11 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <UseAppHost>true</UseAppHost>
     <AssemblyName>JotBloom</AssemblyName>
-    <Version>1.0.3</Version>
-    <InformationalVersion>1.0.3 测试版</InformationalVersion>
+    <Version>1.0.4</Version>
+    <InformationalVersion>1.0.4 测试版</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
-    <FileVersion>1.0.3.1</FileVersion>
-    <AssemblyVersion>1.0.3.0</AssemblyVersion>
+    <FileVersion>1.0.4.1</FileVersion>
+    <AssemblyVersion>1.0.4.0</AssemblyVersion>
     <Product>萌生 · JotBloom</Product>
     <Company>FengLi-AI</Company>
     <ApplicationIcon>Assets/JotBloom.ico</ApplicationIcon>
@@ -23,5 +23,8 @@
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.12" />
     <ProjectReference Include="../JotBloom.Windows.Core/JotBloom.Windows.Core.csproj" />
     <ProjectReference Include="../JotBloom.Windows.Storage/JotBloom.Windows.Storage.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Assets/Fonts/*.ttf" Exclude="**/._*" />
   </ItemGroup>
 </Project>
