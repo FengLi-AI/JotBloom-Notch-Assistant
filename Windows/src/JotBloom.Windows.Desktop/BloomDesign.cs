@@ -14,6 +14,7 @@ namespace JotBloom.Windows.Desktop;
 internal static class BloomTheme
 {
     internal static bool Light { get; private set; }
+    internal static int Revision { get; private set; }
     internal static bool ReduceMotion { get; set; }
     internal static bool Animate => !ReduceMotion && SystemParameters.ClientAreaAnimation;
     internal static SolidColorBrush Brush(string hex) { var b=new SolidColorBrush(ColorOf(hex));b.Freeze();return b; }
@@ -40,7 +41,7 @@ internal static class BloomTheme
     static BloomTheme(){BindingOperations.SetBinding(Rim.GradientStops[1],GradientStop.ColorProperty,new Binding(nameof(ThemeColor.Value)){Source=rimColor,Mode=BindingMode.OneWay});Apply("dark");}
     internal static void Apply(string appearance)
     {
-        Light=appearance=="light";rimColor.Value=ColorOf(Light?"#24000000":"#28FFFFFF");
+        Revision++;Light=appearance=="light";rimColor.Value=ColorOf(Light?"#24000000":"#28FFFFFF");
         var brushes=new[]{Shell,Surface,Well,Raised,Text,Muted,Blue,Stroke,Selected,Bubble,Track,Thumb,Primary};
         var dark=new[]{"#080A0E","#14171D","#191D25","#272D37","#EDF0F6","#AEBBCF","#3B7DFF","#303640","#070A0E","#183D92","#111720","#AEBBCF","#1955E2"};
         var light=new[]{"#EDEFF2","#F6F7F9","#FAFBFC","#FCFDFE","#242A34","#616B7B","#1E5DE0","#DCE1E9","#E4E8EF","#DAE8FF","#D1D7E0","#F7F9FC","#427BF1"};
@@ -63,6 +64,7 @@ internal sealed class BloomButton:Button
     internal bool Plain {get;set;}
     internal bool VerticalLabel {get;set;}
     private static readonly Brush DisabledInk=BloomTheme.Brush("#80FFFFFF");
+    private int paintedTheme=-1;
     private readonly double seed=Random.Shared.NextDouble()*100;
     private static readonly List<WeakReference<BloomButton>> buttons=[];
     private static readonly DispatcherTimer timer=new(TimeSpan.FromMilliseconds(40),DispatcherPriority.Render,(_,_)=>Tick(),Dispatcher.CurrentDispatcher);
@@ -80,11 +82,18 @@ internal sealed class BloomButton:Button
         Template=new ControlTemplate(typeof(Button)){VisualTree=presenter};
         AutomationProperties.SetName(this,text);
         buttons.Add(new(this));timer.Start();
+        IsVisibleChanged+=(_,_)=>{if(IsVisible)timer.Start();};
         Loaded+=(_,_)=>RefreshLabel();IsEnabledChanged+=(_,_)=>UpdateInk();
     }
     private static void Tick()
     {
-        for(int i=buttons.Count-1;i>=0;i--){if(!buttons[i].TryGetTarget(out var b)){buttons.RemoveAt(i);continue;}if(b.IsVisible){b.UpdateInk();if(b.Accent!=""&&BloomTheme.Animate)b.InvalidateVisual();}}
+        bool visible=false;
+        for(int i=buttons.Count-1;i>=0;i--){
+            if(!buttons[i].TryGetTarget(out var b)){buttons.RemoveAt(i);continue;}
+            if(!b.IsVisible)continue;visible=true;b.UpdateInk();
+            if((b.Accent is "blue" or "purple"&&BloomTheme.Animate)||b.paintedTheme!=BloomTheme.Revision){b.paintedTheme=BloomTheme.Revision;b.InvalidateVisual();}
+        }
+        if(!visible)timer.Stop();
     }
     internal void RefreshLabel()
     {
