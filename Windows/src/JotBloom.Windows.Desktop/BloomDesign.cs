@@ -122,7 +122,7 @@ internal sealed class BloomNavigation:Grid
     private string selected="";
     internal BloomNavigation(bool horizontal=false)
     {
-        this.horizontal=horizontal;Background=BloomTheme.Selected;
+        this.horizontal=horizontal;Background=Brushes.Transparent;
         items=new(){Orientation=horizontal?Orientation.Horizontal:Orientation.Vertical};
         highlight.RenderTransform=offset;Children.Add(highlight);Children.Add(items);Margin=new Thickness(4);
         SizeChanged+=(_,_)=>Position(false);

@@ -223,13 +223,13 @@ try {
         for(int version=1;version<7;version++){
             string child=Path.Combine(root,"v"+version);Directory.CreateDirectory(child);string data=Create(child);
             File.Delete(Path.Combine(data,BloomStore.DatabaseName));using var reader=new StreamReader(typeof(BloomStore).Assembly.GetManifestResourceStream("JotBloom.Windows.Storage.Migrations.SchemaV"+version+".sql")!);
-            using(var raw=new SqliteConnection("Data Source="+Path.Combine(data,BloomStore.DatabaseName))){raw.Open();using var cmd=raw.CreateCommand();cmd.CommandText=reader.ReadToEnd()+"INSERT INTO inspirations(title,body,category,category_source,created_at_utc_ms,updated_at_utc_ms,source) VALUES('标题','正文','idea','fallback',1,1,'manual');";cmd.ExecuteNonQuery();}
+            using(var raw=new SqliteConnection(new SqliteConnectionStringBuilder{DataSource=Path.Combine(data,BloomStore.DatabaseName),Pooling=false}.ToString())){raw.Open();using var cmd=raw.CreateCommand();cmd.CommandText=reader.ReadToEnd()+"INSERT INTO inspirations(title,body,category,category_source,created_at_utc_ms,updated_at_utc_ms,source) VALUES('标题','正文','idea','fallback',1,1,'manual');";cmd.ExecuteNonQuery();}
             Require(Location(child).Resolve()==data);Require(File.Exists(Path.Combine(data,BloomStore.DatabaseName)+".bak-v"+version));await using var upgraded=await BloomStore.OpenAsync(data);Require((await upgraded.RecentAsync()).Single().Body=="标题\n正文");
         }
     });
     await Check("migration stops if backup already exists without touching original",async root=>{
         string data=Create(root);File.Delete(Path.Combine(data,BloomStore.DatabaseName));using var reader=new StreamReader(typeof(BloomStore).Assembly.GetManifestResourceStream("JotBloom.Windows.Storage.Migrations.SchemaV6.sql")!);
-        using(var raw=new SqliteConnection("Data Source="+Path.Combine(data,BloomStore.DatabaseName))){raw.Open();using var cmd=raw.CreateCommand();cmd.CommandText=reader.ReadToEnd();cmd.ExecuteNonQuery();}
+        using(var raw=new SqliteConnection(new SqliteConnectionStringBuilder{DataSource=Path.Combine(data,BloomStore.DatabaseName),Pooling=false}.ToString())){raw.Open();using var cmd=raw.CreateCommand();cmd.CommandText=reader.ReadToEnd();cmd.ExecuteNonQuery();}
         string backup=Path.Combine(data,BloomStore.DatabaseName)+".bak-v6";File.WriteAllText(backup,"keep");await Throws<IOException>(()=>BloomStore.OpenAsync(data));Require(Convert.ToInt64(SQL(data,"PRAGMA user_version"))==6&&File.ReadAllText(backup)=="keep");
     });
     await Check("late AI metadata merges with manual body editing",async root=>{
