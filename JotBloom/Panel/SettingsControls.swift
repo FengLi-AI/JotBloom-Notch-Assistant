@@ -18,7 +18,7 @@ struct SettingsControls: View {
             default: EmptyView()
             }
         }
-        .font(.system(size: 12))
+        .font(BloomTypography.font(12, role: .label))
         .buttonStyle(BloomButtonStyle())
         .disabled(model.busy)
         .task(id: section) {
@@ -37,13 +37,13 @@ struct SettingsControls: View {
     private var general: some View {
         VStack(alignment: .leading, spacing: 16) {
             if model.showingOnboarding {
-                card { Text("欢迎使用萌生").fontWeight(.medium); onboarding }
+                card { Text("欢迎使用萌生").font(BloomTypography.font(12, role: .label)); onboarding }
             } else {
             card {
-                Text("全局唤起快捷键").fontWeight(.medium)
+                Text("全局唤起快捷键").font(BloomTypography.font(12, role: .label))
                 HStack {
                     Text(model.recordingShortcut ? (model.shortcutPreview.isEmpty ? "请按下组合键…" : model.shortcutPreview) : model.value.shortcut.label)
-                        .font(.system(size: 15, design: .monospaced))
+                        .font(BloomTypography.font(15))
                     Spacer()
                     Button(model.recordingShortcut ? "取消录制（Esc）" : "录制快捷键") { model.toggleShortcutRecording() }
                     Button("恢复默认") { model.restoreDefaultShortcut() }
@@ -63,7 +63,7 @@ struct SettingsControls: View {
                 note("测试构建放在临时目录时不能开启，请先将 App 放到稳定位置。")
             }
             card {
-                Text("使用说明").fontWeight(.medium)
+                Text("使用说明").font(BloomTypography.font(12, role: .label))
                 Button("重新查看首次引导") { model.reopenOnboarding() }
             }
             }
@@ -95,7 +95,7 @@ struct SettingsControls: View {
                 note("关闭后停止新增记录，已有历史保留。重新开启不会补录暂停期间复制的内容。")
             }
             card {
-                Text("采集与保留").fontWeight(.medium)
+                Text("采集与保留").font(BloomTypography.font(12, role: .label))
                 Picker("保留条数", selection: Binding(get: { model.value.maximumCount }, set: { model.setRetention(count: $0) })) {
                     ForEach(AppSettings.countOptions, id: \.self) { Text($0 == 0 ? "不限" : "\($0) 条").tag($0) }
                 }
@@ -109,7 +109,7 @@ struct SettingsControls: View {
                 Button("重新按当前规则清理") { model.setRetention() }
             }
             card {
-                Text("当前用量").fontWeight(.medium)
+                Text("当前用量").font(BloomTypography.font(12, role: .label))
                 if let usage = model.usage {
                     Text("\(usage.count) 条历史 · 内容用量 \(Self.bytes(usage.contentBytes))")
                     note("数据库与图片磁盘占用 \(Self.bytes(usage.diskBytes))；数据库也包含灵感，不等于剪贴板容量计数。")
@@ -125,7 +125,7 @@ struct SettingsControls: View {
 
     private var storage: some View {
         card {
-            Text("更改保存位置").fontWeight(.medium)
+            Text("更改保存位置").font(BloomTypography.font(12, role: .label))
             note("在所选文件夹下创建独立的 JotBloom 目录，复制并校验已有记录和图片后切换。旧目录保留迁移前副本，新内容只写入新位置。")
             if let usage = model.usage { note("当前数据库与图片约 \(Self.bytes(usage.diskBytes))，另含已有升级备份。迁移前会再次检查目标空间。") }
             Button("选择新位置并迁移…") { selectDirectory() }
@@ -142,7 +142,7 @@ struct SettingsControls: View {
             }
             modelCard(.auxiliary)
             card {
-                Text("哪些内容会发送给模型").fontWeight(.medium)
+                Text("哪些内容会发送给模型").font(BloomTypography.font(12, role: .label))
                 note("测试连接：仅固定测试短句，不发送你的记录。")
                 note("提示词标题：新保存的提示词会发送正文前 2000 字符；失败保留本地标题，后台不弹授权框。")
                 note("灵感 AI 整理：默认关闭。开启后，仅处理之后新保存的灵感，发送原文前 2000 字符；不会自动扫描上传历史。详情中的“AI 整理”是你主动对该条重试。")
@@ -155,7 +155,7 @@ struct SettingsControls: View {
     }
     private func modelCard(_ slot: ModelSlot) -> some View {
         card {
-            Text(slot == .main ? "主模型" : "辅助模型").font(.system(size: 14, weight: .medium))
+            Text(slot == .main ? "主模型" : "辅助模型").font(BloomTypography.font(14, role: .label))
             if slot == .main || !model.value.auxiliaryUsesMain {
                 field("接口地址（包含服务所需的 /v1 前缀）", text: slot == .main ? $model.mainURL : $model.auxiliaryURL)
             }
@@ -235,7 +235,7 @@ struct SettingsControls: View {
             .padding(16).modifier(BloomSurface(color: BloomTheme.well))
     }
     private func note(_ text: String) -> some View {
-        Text(text).font(.system(size: 11)).foregroundStyle(BloomTheme.muted).fixedSize(horizontal: false, vertical: true)
+        Text(text).font(BloomTypography.font(11)).foregroundStyle(BloomTheme.muted).fixedSize(horizontal: false, vertical: true)
     }
     private static func bytes(_ count: Int64) -> String { ByteCountFormatter.string(fromByteCount: count, countStyle: .decimal) }
 }
@@ -246,7 +246,7 @@ struct SettingsOperationFeedback: View {
         HStack(spacing: 8) {
             if model.busy { ProgressView().controlSize(.small) }
             Text(model.feedback ?? "普通设置即时生效；文字配置在提交或失焦后校验保存。")
-                .font(.system(size: 11)).foregroundStyle(BloomTheme.muted).fixedSize(horizontal: false, vertical: true)
+                .font(BloomTypography.font(11)).foregroundStyle(BloomTheme.muted).fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
             if model.migrating { Button("取消迁移") { model.cancelMigration() }.buttonStyle(BloomButtonStyle()) }
         }.frame(minHeight: 28).accessibilityElement(children: .contain)

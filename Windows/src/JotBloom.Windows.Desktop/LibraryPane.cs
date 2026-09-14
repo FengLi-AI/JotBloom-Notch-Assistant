@@ -12,7 +12,8 @@ internal sealed class LibraryPane:BloomPage
     private readonly LibraryKind kind;
     private readonly StackPanel tools=new(){Orientation=Orientation.Horizontal};
     private readonly ListBox list=new(){Background=Brushes.Transparent,BorderThickness=new Thickness(0),Foreground=BloomTheme.Text};
-    private readonly Grid content=new();
+    private readonly Grid content=new(),libraryList=new();
+    private readonly BloomNavigation categoryNav=new();
     private readonly TextBox title=Ui.Editor("标题",false),body=Ui.Editor("正文");
     private readonly ComboBox category=new(){ItemsSource=BloomStore.Categories,MinWidth=90};
     private readonly ComboBox filter=new(){MinWidth=100};
@@ -30,10 +31,15 @@ internal sealed class LibraryPane:BloomPage
     {
         this.kind=kind;autosave=new(SaveDetail,e=>Feedback.Text=Ui.Error(e));
         RowDefinitions.Add(new(){Height=GridLength.Auto});RowDefinitions.Add(new(){Height=new GridLength(1,GridUnitType.Star)});RowDefinitions.Add(new(){Height=GridLength.Auto});
-        if(kind==LibraryKind.Inspirations){filter.ItemsSource=new[]{"全部分类"}.Concat(BloomStore.Categories);filter.SelectedIndex=0;filter.SelectionChanged+=async(_,_)=>{categoryFilter=filter.SelectedIndex==0?null:filter.SelectedItem as string;await Run(()=>Refresh());};tools.Children.Add(filter);}
+        if(kind==LibraryKind.Inspirations){
+            libraryList.ColumnDefinitions.Add(new(){Width=new GridLength(132)});libraryList.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});
+            foreach(string value in new[]{"全部"}.Concat(BloomStore.Categories)){string label=value.Replace("类","");string icon=label switch{"全部"=>"layout-grid","文章"=>"file-text","作品"=>"palette","产品"=>"box",_=>"bulb"};categoryNav.Add(value,label,icon,()=>Run(async()=>{categoryFilter=value=="全部"?null:value;categoryNav.Select(value);await Refresh();BloomTheme.Enter(list);}));}
+            categoryNav.Select("全部");libraryList.Children.Add(Ui.Scroll(Ui.Nav(categoryNav)));Grid.SetColumn(list,1);
+        }
         if(kind==LibraryKind.Prompts){tools.Children.Add(Ui.Button("新建提示词",()=>Run(NewPrompt)));var favorite=new CheckBox{Content="只看常用",Foreground=BloomTheme.Text,Margin=new Thickness(10),VerticalAlignment=VerticalAlignment.Center};favorite.Checked+=async(_,_)=>{favorites=true;await Run(()=>Refresh());};favorite.Unchecked+=async(_,_)=>{favorites=false;await Run(()=>Refresh());};tools.Children.Add(favorite);}
         tools.Children.Add(Ui.Button("刷新",()=>Run(()=>Refresh())));Children.Add(tools);
-        content.Children.Add(list);Grid.SetRow(content,1);Children.Add(content);
+        Feedback.Text=kind==LibraryKind.Clipboard?"左键复制并收起 · 右键复制保留面板":"点击查看 · 右键管理记录";
+        libraryList.Children.Add(list);content.Children.Add(libraryList);Grid.SetRow(content,1);Children.Add(content);
         var footer=new StackPanel();more=Ui.Button("加载更多",()=>Run(()=>Refresh(true)));undo=Ui.Button("撤销删除",()=>Run(Undo));undo.Visibility=Visibility.Collapsed;
         footer.Children.Add(Ui.Row(more,undo));footer.Children.Add(Feedback);Grid.SetRow(footer,2);Children.Add(footer);
         title.TextChanged+=(_,_)=>Dirty();body.TextChanged+=(_,_)=>Dirty();category.SelectionChanged+=(_,_)=>Dirty();
@@ -41,6 +47,7 @@ internal sealed class LibraryPane:BloomPage
         list.PreviewKeyDown+=async(_,e)=>{if(e.Key==Key.Enter&&list.SelectedItem is ListBoxItem row&&row.Tag is LibraryItem item){e.Handled=true;await Run(()=>Open(item));}};
     }
     private void Dirty(){if(!loading&&detail){Feedback.Text=kind==LibraryKind.Prompts?"有未保存的修改。":"正在保存修改…";if(kind==LibraryKind.Inspirations)autosave.Changed();}}
+    internal override void SetExpanded(bool expanded){categoryNav.SetVertical(expanded);}
     internal override Task ActivateAsync()=>detail?Task.CompletedTask:Refresh();
     internal override async Task FlushAsync(){
         if(kind==LibraryKind.Inspirations){await autosave.FlushAsync();return;}
@@ -51,7 +58,7 @@ internal sealed class LibraryPane:BloomPage
     internal override async Task<bool> BackAsync()
     {
         if(!detail)return false;
-        await FlushAsync();detail=false;newPrompt=false;selected=null;content.Children.Clear();content.Children.Add(list);tools.Visibility=Visibility.Visible;await Refresh();_ = Dispatcher.InvokeAsync(()=>FindScroll(list)?.ScrollToVerticalOffset(listOffset),System.Windows.Threading.DispatcherPriority.Loaded);return true;
+        await FlushAsync();detail=false;newPrompt=false;selected=null;content.Children.Clear();content.Children.Add(libraryList);tools.Visibility=Visibility.Visible;await Refresh();_ = Dispatcher.InvokeAsync(()=>FindScroll(list)?.ScrollToVerticalOffset(listOffset),System.Windows.Threading.DispatcherPriority.Loaded);return true;
     }
     internal async Task OpenId(long id){var item=await Runtime.Store.GetAsync(kind,id);if(item is null)throw new InvalidOperationException("记录已不存在。");await Open(item);}
     private async Task Refresh(bool append=false)

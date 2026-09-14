@@ -28,6 +28,7 @@ public sealed record ProductSettings
     public int MaximumCount { get; init; } = 200;
     public int MaximumDays { get; init; }
     public long MaximumBytes { get; init; } = 2_000_000_000;
+    public string Appearance { get; init; } = "dark";
     public bool ReduceMotion { get; init; }
     public bool ShowTrayIcon { get; init; } = true;
     public bool StartWithWindows { get; init; }
@@ -48,7 +49,7 @@ public sealed record ProductSettings
     }
     public void Validate()
     {
-        if (Version != 1 || Shortcut is null || !Shortcut.IsValid || Main is null || Auxiliary is null ||
+        if (Appearance is not ("dark" or "light") || Version != 1 || Shortcut is null || !Shortcut.IsValid || Main is null || Auxiliary is null ||
             TabOrder is null || TabOrder.Length != 6 || !TabOrder.Order().SequenceEqual(new[] { "input", "clipboard", "prompts", "inspirations", "chat", "search" }.Order()) ||
             !TabOrder.Contains(DefaultPage) || string.IsNullOrWhiteSpace(SystemPrompt) || TextRules.Count(SystemPrompt) > 2000 ||
             !new[] { 0, 100, 200, 500, 1000, 5000 }.Contains(MaximumCount) || !new[] { 0,7,30,90,365 }.Contains(MaximumDays) ||
@@ -62,7 +63,7 @@ public sealed class SettingsFile(string file)
     {
         if (!File.Exists(file)) return new();
         var value = JsonSerializer.Deserialize<ProductSettings>(File.ReadAllText(file)) ?? throw new InvalidDataException("设置无法读取。");
-        value.Validate(); return value;
+        value.Validate(); return value.SystemPrompt == AiPrompts.PreviousChat ? value with { SystemPrompt = AiPrompts.Chat } : value;
     }
     public void Save(ProductSettings value)
     {

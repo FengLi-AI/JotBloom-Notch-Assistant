@@ -23,20 +23,20 @@ struct ChatView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("AI 对话").font(.system(size: 17, weight: .semibold))
+                Text("AI 对话").font(BloomTypography.font(17, role: .label))
                 if !model.showingHistory {
                     Text(model.sessions.first(where: \.isCurrent)?.title ?? "新对话")
-                        .font(.system(size: 11)).foregroundStyle(BloomTheme.muted).lineLimit(1)
+                        .font(BloomTypography.font(11)).foregroundStyle(BloomTheme.muted).lineLimit(1)
                 }
                 Spacer()
                 Button(model.showingHistory ? "返回对话" : "历史对话") { model.toggleHistory() }
                     .disabled(!model.canManageSessions)
                 Button("新对话") { model.requestNew() }.disabled(!model.canManageSessions)
-                Button(model.summarizing ? "正在整理…" : "整理成灵感") { model.summarize() }.disabled(!model.canSummarize)
+                Button { model.summarize() } label: { BloomActionLabel(title: model.summarizing ? "正在整理…" : "整理成灵感", symbol: "sparkles") }.buttonStyle(BloomButtonStyle(ai: true)).disabled(!model.canSummarize)
             }.buttonStyle(BloomButtonStyle()).frame(height: 32)
             if !model.configured {
                 HStack {
-                    Text("配置 AI 接口后可开始对话").font(.system(size: 12))
+                    Text("配置 AI 接口后可开始对话").font(BloomTypography.font(12))
                     Button("前往 AI 设置") { model.onOpenSettings?() }.buttonStyle(.plain).foregroundStyle(BloomTheme.blue)
                 }
             }
@@ -129,7 +129,7 @@ struct ChatView: View {
             }
             if let feedback = model.feedback {
                 HStack {
-                    Text(feedback).font(.system(size: 11)).foregroundStyle(BloomTheme.muted).lineLimit(2)
+                    Text(feedback).font(BloomTypography.font(11)).foregroundStyle(BloomTheme.muted).lineLimit(2)
                     if model.needsStorageRetry { Button("重试保存") { model.retryStorage() }.disabled(model.busy) }
                     if model.needsCredentialHelp {
                         Button("前往 AI 设置") { model.onOpenSettings?() }
@@ -142,7 +142,7 @@ struct ChatView: View {
             }
             if !model.showingHistory && !model.summaryPreview {
             Text("消息及必要上下文会发送到设置的主模型，可能产生费用；未完成轮次不会加入后续上下文。")
-                .font(.system(size: 10)).foregroundStyle(BloomTheme.muted).lineLimit(2)
+                .font(BloomTypography.font(10)).foregroundStyle(BloomTheme.muted).lineLimit(2)
             HStack(alignment: .bottom, spacing: 8) {
                 ChatComposer(text: $model.draft, focusRequest: model.focusRequest, enabled: model.ready && !model.switching && !model.summarizing, onSend: model.send)
                     .frame(height: 60).modifier(BloomSurface(color: BloomTheme.well, radius: 14))
@@ -151,10 +151,10 @@ struct ChatView: View {
                 } else {
                     Button("发送") { model.send() }.buttonStyle(BloomButtonStyle(primary: true)).disabled(!model.canSend)
                 }
-            }.padding(.trailing, 38)
+            }.padding(.trailing, 42)
             }
         }
-        .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 8)
+        .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 16)
         .foregroundStyle(BloomTheme.text)
         .onDisappear { model.confirmingDelete = false }
         .confirmationDialog("删除这条对话？", isPresented: $model.confirmingDelete) {
@@ -179,11 +179,11 @@ struct ChatView: View {
                             Button { model.selectSession(session) } label: {
                                 HStack {
                                     VStack(alignment: .leading, spacing: 4) {
-                                        Text(session.title).font(.system(size: 13, weight: .medium)).lineLimit(1)
-                                        Text(SavedTime.text(session.timestamp)).font(.system(size: 10)).foregroundStyle(BloomTheme.muted)
+                                        Text(session.title).font(BloomTypography.font(13, role: .label)).lineLimit(1)
+                                        Text(SavedTime.text(session.timestamp)).font(BloomTypography.font(10)).foregroundStyle(BloomTheme.muted)
                                     }
                                     Spacer()
-                                    if session.isCurrent { Text("当前").font(.system(size: 11)).foregroundStyle(BloomTheme.blue) }
+                                    if session.isCurrent { Text("当前").font(BloomTypography.font(11)).foregroundStyle(BloomTheme.blue) }
                                 }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
                             }.buttonStyle(.plain)
                             BloomIconButton(title: "重命名对话", symbol: "pencil") { sessionName = session.title; renaming = session.id }
@@ -199,16 +199,16 @@ struct ChatView: View {
     }
     private var summaryEditor: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("整理预览 · 确认后才保存").font(.system(size: 13, weight: .semibold))
+            Text("整理预览 · 确认后才保存").font(BloomTypography.font(13, role: .label))
             TextField("灵感标题", text: $model.summaryTitle).textFieldStyle(.plain).padding(12)
                 .modifier(BloomSurface(color: BloomTheme.well)).accessibilityLabel("整理后的灵感标题")
-            TextEditor(text: $model.summaryBody).font(.system(size: 14)).scrollContentBackground(.hidden)
+            TextEditor(text: $model.summaryBody).font(BloomTypography.font(14)).scrollContentBackground(.hidden)
                 .padding(10).modifier(BloomSurface(color: BloomTheme.well)).accessibilityLabel("整理后的灵感正文")
             HStack {
                 Spacer()
                 Button("放弃预览") { model.discardSummary() }
                 Button("保存灵感") { model.saveSummary() }.buttonStyle(BloomButtonStyle(primary: true))
-            }.buttonStyle(BloomButtonStyle()).padding(.trailing, 38)
+            }.buttonStyle(BloomButtonStyle()).padding(.trailing, 42)
         }.disabled(model.busy)
     }
     private func saveName(_ session: ChatSession) {
@@ -221,15 +221,15 @@ struct ChatView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Spacer(minLength: 40)
-                Text(turn.user).font(.system(size: 13)).textSelection(.enabled)
-                    .padding(10).modifier(BloomSurface(color: BloomTheme.selected, radius: 16))
+                Text(turn.user).font(BloomTypography.font(13)).textSelection(.enabled)
+                    .padding(12).modifier(BloomSurface(color: BloomTheme.userBubble, radius: 16))
             }
             HStack {
-                Text(SavedTime.text(turn.timestamp)).font(.system(size: 10)).foregroundStyle(BloomTheme.muted)
+                Text(SavedTime.text(turn.timestamp)).font(BloomTypography.font(10)).foregroundStyle(BloomTheme.muted)
                 Spacer()
             }
             Text(turn.answer.isEmpty && turn.status.isActive ? "正在等待回复…" : turn.answer)
-                .font(.system(size: 13)).lineSpacing(3).textSelection(.enabled)
+                .font(BloomTypography.font(13)).lineSpacing(3).textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
             HStack(spacing: 12) {
@@ -242,7 +242,7 @@ struct ChatView: View {
                     Text(statusLabel(turn.status)).foregroundStyle(BloomTheme.muted)
                     if model.turns.last?.id == turn.id { Button("重试") { model.retry() }.disabled(!model.canRetry) }
                 }
-            }.font(.system(size: 11)).buttonStyle(.plain).foregroundStyle(BloomTheme.blue)
+            }.font(BloomTypography.font(11, role: .label)).buttonStyle(.plain).foregroundStyle(BloomTheme.blue)
         }
     }
     private func statusLabel(_ status: ChatStatus) -> String {

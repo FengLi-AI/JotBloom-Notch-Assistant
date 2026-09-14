@@ -86,7 +86,7 @@ struct BloomListFocusOutline: ViewModifier {
     func body(content: Content) -> some View {
         content.overlay {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(BloomTheme.blue.opacity(keyboardNavigation && isFocused ? 0.8 : 0), lineWidth: 2)
+                .strokeBorder(BloomTheme.blue.opacity(keyboardNavigation && isFocused ? 0.8 : 0), lineWidth: BloomTheme.surfaceStroke)
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
         }

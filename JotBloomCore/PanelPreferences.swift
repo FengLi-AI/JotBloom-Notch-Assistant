@@ -27,19 +27,26 @@ public enum PanelSlot: String, Codable, CaseIterable {
     }
 }
 
+public enum PanelAppearance: String, CaseIterable {
+    case dark, light
+}
+
 public struct PanelPreferences: Equatable {
     public private(set) var order: [PanelSlot]
     public var defaultSlot: PanelSlot {
         didSet { if !defaultSlot.isAvailable { defaultSlot = .inspiration } }
     }
+    public var appearance: PanelAppearance
     public var reduceMotion: Bool
 
     public init(order: [PanelSlot] = PanelSlot.allCases,
-                defaultSlot: PanelSlot = .inspiration, reduceMotion: Bool = false) {
+                defaultSlot: PanelSlot = .inspiration, reduceMotion: Bool = false,
+                appearance: PanelAppearance = .dark) {
         var seen = Set<PanelSlot>()
         self.order = (order + PanelSlot.allCases).filter { seen.insert($0).inserted }
         self.defaultSlot = defaultSlot.isAvailable ? defaultSlot : .inspiration
         self.reduceMotion = reduceMotion
+        self.appearance = appearance
     }
 
     public mutating func move(_ slot: PanelSlot, by distance: Int) {
@@ -58,13 +65,15 @@ public struct PanelPreferencesStore {
         return PanelPreferences(
             order: (record["order"] as? [String] ?? []).compactMap(PanelSlot.init(rawValue:)),
             defaultSlot: (record["default"] as? String).flatMap(PanelSlot.init(rawValue:)) ?? .inspiration,
-            reduceMotion: record["reduceMotion"] as? Bool ?? false
+            reduceMotion: record["reduceMotion"] as? Bool ?? false,
+            appearance: (record["appearance"] as? String).flatMap(PanelAppearance.init(rawValue:)) ?? .dark
         )
     }
 
     public func save(_ preferences: PanelPreferences) {
         defaults.set(["order": preferences.order.map(\.rawValue),
                       "default": preferences.defaultSlot.rawValue,
-                      "reduceMotion": preferences.reduceMotion], forKey: key)
+                      "reduceMotion": preferences.reduceMotion,
+                      "appearance": preferences.appearance.rawValue], forKey: key)
     }
 }

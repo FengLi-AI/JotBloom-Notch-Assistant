@@ -22,7 +22,7 @@ public struct PromptTitleService: Sendable {
         request.setValue("Bearer " + key, forHTTPHeaderField: "Authorization")
         let model = configuration.model.trimmingCharacters(in: .whitespacesAndNewlines)
         var body: [String: Any] = ["model": model, "stream": false, "temperature": 0.3,
-            "messages": [["role": "system", "content": Self.systemPrompt], ["role": "user", "content": String(content.prefix(2000))]]]
+            "messages": [["role": "system", "content": ChatContext.productRules + "\n" + Self.systemPrompt], ["role": "user", "content": String(content.prefix(2000))]]]
         ShortModelTask.applyOptions(to: &body, baseURL: base, model: model)
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         try Task.checkCancellation()

@@ -42,7 +42,7 @@ final class PromptTitleTests: XCTestCase {
         let request = try XCTUnwrap(requests.first)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: Any])
         let messages = try XCTUnwrap(json["messages"] as? [[String: String]])
-        XCTAssertEqual(messages.count, 2); XCTAssertEqual(messages[0]["content"], PromptTitleService.systemPrompt)
+        XCTAssertEqual(messages.count, 2); XCTAssertEqual(messages[0]["content"], ChatContext.productRules + "\n" + PromptTitleService.systemPrompt)
         XCTAssertEqual(messages[1]["content"]?.count, 2000)
         XCTAssertEqual(json["temperature"] as? Double, 0.3); XCTAssertEqual(json["max_tokens"] as? Int, 128)
         XCTAssertNil(json["thinking"])

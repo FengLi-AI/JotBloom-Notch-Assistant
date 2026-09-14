@@ -14,7 +14,7 @@ struct GlobalSearchView: View {
         VStack(spacing: 0) {
             TextField("搜索全部内容", text: $viewModel.query)
                 .textFieldStyle(.plain)
-                .font(.system(size: 13))
+                .font(BloomTypography.font(13))
                 .padding(.horizontal, 10)
                 .frame(height: 36)
                 .modifier(BloomSurface(color: BloomTheme.well))
@@ -32,7 +32,7 @@ struct GlobalSearchView: View {
         }
         .padding(.horizontal, 16)
         .padding(.top, 8)
-        .padding(.bottom, 4)
+        .padding(.bottom, 16)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
             DispatchQueue.main.async {
@@ -62,8 +62,13 @@ struct GlobalSearchView: View {
                 .accessibilityValue(viewModel.scope == scope ? "已选中" : "未选中")
                 .help("只查看\(scope.title)搜索结果，保留当前关键词")
             }
-            Spacer(minLength: 0)
         }
+        .background(alignment: .leading) {
+            BloomSelectionSurface(radius: 10).frame(width: 96, height: 30)
+                .offset(x: CGFloat(GlobalSearchScope.allCases.firstIndex(of: viewModel.scope) ?? 0) * 102)
+                .animation(reduceMotion ? nil : BloomTheme.selectionAnimation, value: viewModel.scope)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .fixedSize(horizontal: false, vertical: true)
     }
 
@@ -77,7 +82,7 @@ struct GlobalSearchView: View {
         case .empty:
             VStack(spacing: 12) {
                 Text("没有找到相关内容，试试更短的关键词")
-                    .font(.system(size: 13)).foregroundStyle(BloomTheme.muted)
+                    .font(BloomTypography.font(13)).foregroundStyle(BloomTheme.muted)
                 Button("清除关键词") { viewModel.query = ""; inputFocused = true }
                     .buttonStyle(BloomButtonStyle())
             }.frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -89,7 +94,7 @@ struct GlobalSearchView: View {
             } else if viewModel.visibleResults.isEmpty {
                 VStack(spacing: 12) {
                     Text("\(viewModel.scope.title)中没有匹配结果")
-                        .font(.system(size: 13)).foregroundStyle(BloomTheme.muted)
+                        .font(BloomTypography.font(13)).foregroundStyle(BloomTheme.muted)
                     Button("查看全部结果") { viewModel.selectScope(.all) }
                         .buttonStyle(BloomButtonStyle())
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -140,7 +145,7 @@ struct GlobalSearchView: View {
             if viewModel.scope == .all {
                 HStack {
                     Text(source.displayName)
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(BloomTypography.font(11, role: .label))
                         .foregroundColor(BloomTheme.muted)
                         .accessibilityAddTraits(.isHeader)
                     Spacer()
@@ -148,7 +153,7 @@ struct GlobalSearchView: View {
                        let scope = GlobalSearchScope.allCases.first(where: { $0.source == source }) {
                         Button { viewModel.selectScope(scope) } label: {
                             Text("查看全部 \(viewModel.count(for: scope)) 条 ›")
-                                .font(.system(size: 11))
+                                .font(BloomTypography.font(11))
                                 .foregroundStyle(BloomTheme.blue)
                                 .padding(.horizontal, 8).frame(minHeight: 28)
                                 .contentShape(Rectangle())
@@ -175,7 +180,7 @@ struct GlobalSearchView: View {
 
     private func stateMessage(_ message: String) -> some View {
         Text(message)
-            .font(.system(size: 13))
+            .font(BloomTypography.font(13))
             .foregroundColor(BloomTheme.muted)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -183,7 +188,7 @@ struct GlobalSearchView: View {
     private var failureState: some View {
         VStack(spacing: 8) {
             Text("无法搜索本地内容，请重试")
-                .font(.system(size: 13))
+                .font(BloomTypography.font(13))
                 .foregroundColor(BloomTheme.muted)
             Button("重试") {
                 viewModel.retry()
@@ -197,19 +202,19 @@ struct GlobalSearchView: View {
     private var feedbackRow: some View {
         if let feedback = viewModel.feedback {
             Text(feedback.message)
-                .font(.system(size: 11))
+                .font(BloomTypography.font(11))
                 .foregroundColor(
                     feedback.kind == .error
                         ? Color(nsColor: .systemRed)
                         : BloomTheme.muted
                 )
                 .lineLimit(1)
-                .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
+                .frame(maxWidth: .infinity, minHeight: 34, alignment: .bottomLeading)
                 .padding(.trailing, 44)
                 .accessibilityLabel(feedback.message)
         } else {
             Color.clear
-                .frame(height: 24)
+                .frame(height: 34, alignment: .bottom)
                 .accessibilityHidden(true)
         }
     }
@@ -217,12 +222,13 @@ struct GlobalSearchView: View {
 
 private struct SearchScopeButtonStyle: ButtonStyle {
     let selected: Bool
+    @Environment(\.bloomReduceMotion) private var reduceMotion
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 12, weight: selected ? .semibold : .medium))
-            .foregroundStyle(selected ? BloomTheme.blue : BloomTheme.muted)
-            .padding(.horizontal, 12).frame(minHeight: 30)
-            .background(Capsule().fill(selected ? BloomTheme.selected : BloomTheme.well))
+            .font(BloomTypography.font(12, role: .label))
+            .foregroundStyle(selected ? Color.white : BloomTheme.muted)
+            .padding(.horizontal, 8).frame(width: 96, height: 30)
+            .animation(reduceMotion ? nil : BloomTheme.selectionAnimation, value: selected)
             .contentShape(Capsule())
             .opacity(configuration.isPressed ? 0.75 : 1)
     }

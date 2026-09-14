@@ -38,8 +38,8 @@ struct BloomDragHandle: View {
     @ObservedObject var drag: BloomLibraryDrag
     let move: (Int64, Int64, Bool) -> Void
     var body: some View {
-        Image(systemName: "line.3.horizontal")
-            .font(.system(size: 11)).foregroundStyle(BloomTheme.muted)
+        BloomSymbol("line.3.horizontal")
+            .font(BloomTypography.font(11)).foregroundStyle(BloomTheme.muted)
             .frame(width: 20, height: 32).contentShape(Rectangle())
             .help("按住拖动排序；右键可上移或下移")
             .accessibilityLabel("拖动排序")

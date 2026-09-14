@@ -76,7 +76,10 @@ public struct AppSettingsStore {
         value.auxiliary = ModelConfiguration(baseURL: d["auxURL"] as? String ?? "", model: d["auxModel"] as? String ?? "")
         value.auxiliaryUsesMain = d["auxiliaryUsesMain"] as? Bool ?? true
         value.inspirationAIEnabled = d["inspirationAIEnabled"] as? Bool ?? false
-        if let text = d["chatSystemPrompt"] as? String, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, text.count <= 2000 { value.chatSystemPrompt = text }
+        if let text = d["chatSystemPrompt"] as? String, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, text.count <= 2000 {
+            // Upgrade only exact shipped defaults; preserve every custom preference verbatim.
+            value.chatSystemPrompt = [ChatContext.previousSystem, ChatContext.legacySystem].contains(text) ? ChatContext.system : text
+        }
         return value
     }
     public func save(_ value: AppSettings) {

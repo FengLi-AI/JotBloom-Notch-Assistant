@@ -13,19 +13,19 @@ struct AboutSettingsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             card {
-                Label("萌生 · JotBloom", systemImage: "leaf").font(.system(size: 22, weight: .semibold))
+                BloomActionLabel(title: "萌生 · JotBloom", symbol: "leaf").font(BloomTypography.font(22, role: .label))
                     .foregroundStyle(BloomTheme.text)
                 Text("给闪过的想法，一点空间。")
-                    .font(.system(size: 16, weight: .medium)).foregroundStyle(BloomTheme.blue)
+                    .font(BloomTypography.font(16, role: .label)).foregroundStyle(BloomTheme.blue)
                     .fixedSize(horizontal: false, vertical: true)
                 Text("记下来，然后继续手头的事。")
-                    .font(.system(size: 12)).foregroundStyle(BloomTheme.muted)
+                    .font(BloomTypography.font(12)).foregroundStyle(BloomTheme.muted)
                 Button("产品官网 ↗") { visit("https://fengli-ai.github.io/JotBloom-Notch-Assistant/") }
                     .buttonStyle(BloomButtonStyle())
             }
             card {
-                Text("版本 \(version)").font(.system(size: 13, weight: .medium))
-                Text("构建号 \(build)").font(.system(size: 11)).foregroundStyle(BloomTheme.muted)
+                Text("版本 \(version)").font(BloomTypography.font(13, role: .label))
+                Text("构建号 \(build)").font(BloomTypography.font(11)).foregroundStyle(BloomTheme.muted)
                 HStack(spacing: 10) {
                     Button(checking ? "正在检查…" : "检查最新版本") { check() }
                         .disabled(checking).buttonStyle(BloomButtonStyle())
@@ -34,21 +34,21 @@ struct AboutSettingsView: View {
                         Button("查看新版本 ↗") { openURL(available.pageURL) }.buttonStyle(BloomButtonStyle())
                     }
                 }
-                Text(message).font(.system(size: 11)).foregroundStyle(BloomTheme.muted)
+                Text(message).font(BloomTypography.font(11)).foregroundStyle(BloomTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
                 Text("检查时连接 GitHub；下载后由你安装。")
-                    .font(.system(size: 11)).foregroundStyle(BloomTheme.muted)
+                    .font(BloomTypography.font(11)).foregroundStyle(BloomTheme.muted)
                 Button("打开版本页面 ↗") { openURL(ReleaseChecker.releasesURL) }.buttonStyle(BloomButtonStyle())
             }
             card {
-                Text("作者").font(.system(size: 13, weight: .medium))
-                Text("李烽立｜Li Fengli").font(.system(size: 13))
+                Text("作者").font(BloomTypography.font(13, role: .label))
+                Text("李烽立｜Li Fengli").font(BloomTypography.font(13))
                 contact("邮箱", "qq204407676@gmail.com", url: "mailto:qq204407676@gmail.com")
                 contact("微信", "feNgL1999_")
                 contact("小红书", "FengLiAi · 个人主页 ↗", url: "https://www.xiaohongshu.com/user/profile/69b6dd97000000003303a64d")
                 contact("抖音号", "N24642464（在抖音内搜索）")
                 Text("遇到 Bug 或有功能建议，欢迎通过以上方式联系作者。谢谢你帮助萌生变得更好。")
-                    .font(.system(size: 11)).foregroundStyle(BloomTheme.muted)
+                    .font(BloomTypography.font(11)).foregroundStyle(BloomTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -78,14 +78,14 @@ struct AboutSettingsView: View {
     private func visit(_ address: String) { if let url = URL(string: address) { openURL(url) } }
     private func contact(_ label: String, _ value: String, url: String? = nil) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(label).font(.system(size: 11)).foregroundStyle(BloomTheme.muted)
+            Text(label).font(BloomTypography.font(11)).foregroundStyle(BloomTheme.muted)
             if let url {
                 Button { visit(url) } label: {
-                    Text(value).font(.system(size: 12)).foregroundStyle(BloomTheme.blue)
+                    Text(value).font(BloomTypography.font(12)).foregroundStyle(BloomTheme.blue)
                         .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
                 }.buttonStyle(.plain)
             } else {
-                Text(value).font(.system(size: 12)).textSelection(.enabled)
+                Text(value).font(BloomTypography.font(12)).textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }

@@ -14,10 +14,10 @@ struct ClipboardHistoryView: View {
     var body: some View {
         VStack(spacing: 8) {
             HStack {
-                Text("剪贴板").modifier(BloomType(size: expanded ? 20 : 16, weight: .semibold))
+                Text("剪贴板").font(BloomTypography.font(17, role: .label))
                 Spacer()
-                Text("\(viewModel.items.count) 条记录").font(.system(size: 11)).foregroundStyle(BloomTheme.muted)
-            }.frame(height: 24)
+                Text("\(viewModel.items.count) 条记录").font(BloomTypography.font(11)).foregroundStyle(BloomTheme.muted)
+            }.frame(height: 32)
             GeometryReader { geometry in
                 Group {
                     if !viewModel.isReady {
@@ -27,7 +27,7 @@ struct ClipboardHistoryView: View {
                             .accessibilityLabel("正在读取剪贴板历史")
                     } else if viewModel.items.isEmpty {
                         Text("暂无内容")
-                            .font(.system(size: 13))
+                            .font(BloomTypography.font(13))
                             .foregroundColor(BloomTheme.muted)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
@@ -46,13 +46,14 @@ struct ClipboardHistoryView: View {
                         .transition(.opacity)
                 } else {
                     Text("左键复制并收起 · 右键 / ⌘C 复制不收起")
-                        .font(.system(size: 10)).foregroundStyle(BloomTheme.muted)
-                        .frame(maxWidth: .infinity, minHeight: 34, alignment: .leading)
+                        .font(BloomTypography.font(10)).foregroundStyle(BloomTheme.muted)
+                        .bloomMeasure("clipboardFooterText")
+                        .frame(maxWidth: .infinity, minHeight: 34, alignment: .bottomLeading)
                 }
-            }.frame(height: 34).padding(.trailing, expanded ? 80 : 40)
+            }.frame(height: 34, alignment: .bottom).padding(.trailing, expanded ? 84 : 42)
         }
         .padding(.horizontal, 16)
-        .padding(.top, 12)
+        .padding(.top, 12).padding(.bottom, 16)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(BloomListFocusTarget(request: viewModel.focusRequest, isFocused: $listFocused))
         .onReceive(promptModel?.$busy.eraseToAnyPublisher() ?? Just(false).eraseToAnyPublisher()) { saving = $0 }
@@ -104,7 +105,7 @@ struct ClipboardHistoryView: View {
     private func feedbackView(_ feedback: ClipboardFeedback) -> some View {
         HStack(spacing: 8) {
             Text(feedback.message)
-                .font(.system(size: 11))
+                .font(BloomTypography.font(11))
                 .foregroundColor(BloomTheme.muted)
 
             if feedback.kind == .deleted, viewModel.canUndo {
@@ -112,11 +113,11 @@ struct ClipboardHistoryView: View {
                     viewModel.undoDeletion()
                 }
                 .buttonStyle(.plain)
-                .font(.system(size: 11, weight: .medium))
+                .font(BloomTypography.font(11, role: .label))
                 .foregroundColor(BloomTheme.blue)
             }
         }
         .padding(.horizontal, 8)
-        .frame(height: 34)
+        .frame(height: 34, alignment: .bottom)
     }
 }

@@ -17,6 +17,7 @@ struct ClipboardHistoryRow: View {
     var isSaving = false
 
     @Environment(\.bloomExpanded) private var expanded
+    @Environment(\.bloomReduceMotion) private var reduceMotion
     @State private var isHovering = false
 
     var body: some View {
@@ -33,11 +34,11 @@ struct ClipboardHistoryRow: View {
                         HStack(spacing: 4) {
                             BloomApplicationIcon(bundleIdentifier: item.sourceApplication.bundleIdentifier)
                             Text(item.sourceApplication.name ?? "来源应用未知")
-                                .font(.system(size: 10)).foregroundStyle(BloomTheme.muted).lineLimit(1)
+                                .font(BloomTypography.font(10)).foregroundStyle(BloomTheme.muted).lineLimit(1)
                         }
                     }.frame(maxWidth: .infinity, alignment: .leading)
                     Text(didCopyWithCommand ? "已复制" : SavedTime.text(item.copiedAtUTCms))
-                        .font(.system(size: 10)).foregroundStyle(BloomTheme.muted)
+                        .font(BloomTypography.font(10)).foregroundStyle(BloomTheme.muted)
                         .lineLimit(1).fixedSize(horizontal: true, vertical: false)
                 }
                 .padding(.leading, 12).padding(.trailing, 168)
@@ -55,11 +56,12 @@ struct ClipboardHistoryRow: View {
                 BloomIconButton(title: "删除剪贴板记录", symbol: "trash", destructive: true, helpText: "删除记录，3 秒内可撤销", action: onDelete)
                     .padding(.leading, 8)
             }
-            .font(.system(size: 13)).foregroundStyle(BloomTheme.muted).buttonStyle(.plain)
+            .font(BloomTypography.font(13)).foregroundStyle(BloomTheme.muted).buttonStyle(.plain)
             .padding(.trailing, 8)
         }
         .frame(height: expanded ? 58 : 48)
         .modifier(BloomSurface(color: backgroundColor, radius: expanded ? 20 : 14))
+        .animation(reduceMotion ? nil : BloomTheme.layoutAnimation, value: expanded)
         .contentShape(Rectangle()).onHover { isHovering = $0 }
         .help(helpText).accessibilityElement(children: .contain)
         .accessibilityLabel(accessibilityLabel).accessibilityAddTraits(isSelected ? [.isSelected] : [])
@@ -69,12 +71,12 @@ struct ClipboardHistoryRow: View {
     private var leadingVisual: some View {
         switch item.contentType {
         case .text:
-            Image(systemName: "text.alignleft")
-                .font(.system(size: 16))
+            BloomSymbol("text.alignleft")
+                .font(BloomTypography.font(16))
                 .frame(width: 16)
         case .link:
-            Image(systemName: "link")
-                .font(.system(size: 16))
+            BloomSymbol("link")
+                .font(BloomTypography.font(16))
                 .frame(width: 16)
         case .image:
             if let thumbnailURL,
@@ -85,8 +87,8 @@ struct ClipboardHistoryRow: View {
                     .frame(width: 32, height: 32)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
             } else {
-                Image(systemName: "photo")
-                    .font(.system(size: 16))
+                BloomSymbol("photo")
+                    .font(BloomTypography.font(16))
                     .foregroundColor(secondaryForegroundColor)
                     .frame(width: 32, height: 32)
             }

@@ -1,0 +1,78 @@
+name: Windows native UI check
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/native-dark-ui-20260914]
+    paths: ['Windows/**', '.github/workflows/windows-ui-check.yml']
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: Windows/global.json
+      - name: Core and storage contracts
+        working-directory: Windows
+        shell: pwsh
+        run: |
+          dotnet run --project tests/JotBloom.Windows.Core.Tests
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet run --project tests/JotBloom.Windows.Storage.Tests
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/check-schema.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build self-contained Windows client
+        working-directory: Windows
+        shell: pwsh
+        run: |
+          dotnet publish src/JotBloom.Windows.Desktop -c Release -r win-x64 --self-contained true -p:DebugType=None -p:DebugSymbols=false -o "$env:RUNNER_TEMP/publish"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Render real WPF pages and exercise themes
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force ui-evidence | Out-Null
+          $process = Start-Process "$env:RUNNER_TEMP/publish/JotBloom.exe" -ArgumentList @('--ui-smoke', "$pwd/ui-evidence") -PassThru
+          if (-not $process.WaitForExit(180000)) { $process.Kill(); throw 'UI check timed out' }
+          Get-Content ui-evidence/report.json -ErrorAction SilentlyContinue
+          Get-Content ui-evidence/exception.txt -ErrorAction SilentlyContinue
+          if ($process.ExitCode -ne 0) { throw "UI check failed: $($process.ExitCode)" }
+      - name: Build and verify EXE installer
+        shell: pwsh
+        run: |
+          choco install nsis --no-progress -y
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $env:PATH += ";${env:ProgramFiles(x86)}\NSIS"
+          python Windows/scripts/package.py "$env:RUNNER_TEMP/publish" "$pwd/windows-package"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $installer = Get-ChildItem windows-package/*Setup.exe | Select-Object -First 1
+          $install = "$env:RUNNER_TEMP/JotBloom-installed"
+          $process = Start-Process $installer.FullName -ArgumentList @('/S', "/D=$install") -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw 'Installer failed' }
+          $manifest = Get-Content "$install/payload-sha256.json" -Raw | ConvertFrom-Json -AsHashtable
+          foreach ($entry in $manifest.GetEnumerator()) {
+            $hash = (Get-FileHash (Join-Path $install $entry.Key) -Algorithm SHA256).Hash.ToLower()
+            if ($hash -ne $entry.Value) { throw "Payload mismatch: $($entry.Key)" }
+          }
+          $installed = Start-Process "$install/JotBloom.exe" -ArgumentList @('--ui-smoke', "$pwd/installed-ui-evidence") -PassThru
+          if (-not $installed.WaitForExit(180000)) { $installed.Kill(); throw 'Installed app timed out' }
+          if ($installed.ExitCode -ne 0) { Get-Content installed-ui-evidence/exception.txt; throw 'Installed app UI check failed' }
+          $uninstall = Start-Process "$install/Uninstall.exe" -ArgumentList '/S' -Wait -PassThru
+          if ($uninstall.ExitCode -ne 0) { throw 'Uninstall failed' }
+          "Verified $($manifest.Count) installed file hashes and installed app UI." | Set-Content windows-package/verification.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: windows-package/
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-ui-evidence
+          path: |
+            ui-evidence/
+            installed-ui-evidence/

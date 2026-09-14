@@ -412,7 +412,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         var registeredShortcut = appSettings.shortcut
 #if DEBUG
-        if isStageOneSmoke || isStageTwoSmoke || isStageThreeSmoke || isStageFourSmoke || isStageFiveSmoke || settingsAreIsolated {
+        if isStageOneSmoke || isStageTwoSmoke || isStageThreeSmoke || isStageFourSmoke || isStageFiveSmoke || (settingsAreIsolated && ProcessInfo.processInfo.environment["JOTBLOOM_UI_REVIEW"] != "1") {
             // Do not take the user's everyday Option-Space during legacy lifecycle probes.
             registeredShortcut = Shortcut(keyCode: UInt32(kVK_F19), modifiers: UInt32(controlKey | optionKey | shiftKey), label: "⌃⌥⇧F19")
         }
@@ -478,6 +478,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         logger.info("JotBloom stage-five global search slice started")
 
 #if DEBUG
+        if ProcessInfo.processInfo.environment["JOTBLOOM_UI_REVIEW"] == "1", settingsAreIsolated {
+            coordinator.show()
+            if ProcessInfo.processInfo.environment["JOTBLOOM_REVIEW_SMOKE"] == "1" {
+                Task { @MainActor in
+                    do {
+                        let checks = try await panelController.debugReviewLifecycleProbe(show: { coordinator.show() }, toggle: { coordinator.toggle() })
+                        for (name, passed) in checks { print("JOTBLOOM_REVIEW \(name)=\(passed)") }
+                        fflush(stdout); exit(checks.allSatisfy(\.1) ? 0 : 1)
+                    } catch { print("JOTBLOOM_REVIEW error=\(error)"); fflush(stdout); exit(1) }
+                }
+            }
+        }
         if ProcessInfo.processInfo.environment["JOTBLOOM_UI_WALKTHROUGH"] == "1", settingsAreIsolated {
             panelController.debugSetAutomaticDismissalEnabled(false)
             coordinator.show()

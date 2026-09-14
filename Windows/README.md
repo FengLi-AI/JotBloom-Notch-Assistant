@@ -1,6 +1,6 @@
 # 萌生 Windows 客户端
 
-版本：**1.0.3 测试版**。适配 Windows 10 22H2 / Windows 11，Intel / AMD x64。
+版本：**1.0.4 测试版**。适配 Windows 10 22H2 / Windows 11，Intel / AMD x64。
 
 基于 C#、.NET 10、WPF 和 Win32，提供灵感记录、剪贴板、提示词、灵感库、AI 对话、搜索及设置。鼠标紧贴屏幕顶部中央 300 DIP 宽的区域后出现提示条，点击呼出主面板；默认快捷键 `Ctrl+Alt+Space` 可直接呼出。
 
@@ -37,4 +37,6 @@ python3 scripts/package.py /path/to/publish /path/to/output
 - `tests/`：使用临时目录和受控响应的契约检查。
 - `licenses/`：分发依赖的许可原文。
 
-已完成 42 项 Core/AI/设置检查、43 项 SQLite/文件检查和 19 个数据库结构对象对照；用户反馈 Windows 电脑安装与使用正常。该反馈不代表所有系统版本和设备均已覆盖。
+已完成 47 项 Core/AI/设置检查、43 项 SQLite/文件检查和 19 个数据库结构对象对照。1.0.4 新增深浅双主题、MiSans、Tabler 图标、蓝紫缓动弥散按钮、二级导航动效和主题圆形扩散（1.5 秒），同步当前 Mac 的普通页尺寸记忆及默认提示词。
+
+Windows 原生页面和安装包的自动化记录见仓库 Actions。此前用户的安装与使用反馈针对旧版，不代表 1.0.4 或所有 Windows 10 / 11 设备均已实机验收。

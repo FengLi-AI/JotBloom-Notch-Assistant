@@ -12,6 +12,7 @@ namespace JotBloom.Windows.Desktop;
 internal sealed class SettingsPane:BloomPage
 {
     private readonly StackPanel content=new();
+    private readonly BloomNavigation sectionNav=new();
     private readonly TextBox system=Ui.Editor("系统提示词");
     private string section="通用";
     private bool systemDirty,recording;
@@ -19,18 +20,18 @@ internal sealed class SettingsPane:BloomPage
     private Hotkey? candidate;
     internal SettingsPane(AppRuntime runtime):base(runtime)
     {
-        ColumnDefinitions.Add(new(){Width=new GridLength(120)});ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});
+        ColumnDefinitions.Add(new(){Width=new GridLength(136)});ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});
         RowDefinitions.Add(new(){Height=new GridLength(1,GridUnitType.Star)});RowDefinitions.Add(new(){Height=GridLength.Auto});
-        var nav=new StackPanel();foreach(string name in new[]{"通用","顶部标签","剪贴板","存储与隐私","AI 接口","系统提示词","关于"})nav.Children.Add(Ui.Button(name,()=>Run(async()=>{await FlushAsync();section=name;ShowSection();})));
-        Children.Add(nav);var scroll=Ui.Scroll(content);Grid.SetColumn(scroll,1);Children.Add(scroll);Grid.SetRow(Feedback,1);Grid.SetColumnSpan(Feedback,2);Children.Add(Feedback);
+        foreach(string name in new[]{"通用","顶部标签","剪贴板","存储与隐私","AI 接口","系统提示词","关于"}){string icon=name switch{"通用"=>"adjustments-horizontal","顶部标签"=>"layout-grid","剪贴板"=>"clipboard","存储与隐私"=>"database","AI 接口"=>"sparkles","系统提示词"=>"message-circle",_=>"info-circle"};sectionNav.Add(name,name,icon,()=>Run(async()=>{await FlushAsync();section=name;ShowSection();}));}
+        var sidebar=Ui.Nav(sectionNav);Children.Add(sidebar);var scroll=Ui.Scroll(content);Grid.SetColumn(scroll,1);Children.Add(scroll);Grid.SetRow(Feedback,1);Grid.SetColumnSpan(Feedback,2);Children.Add(Feedback);
         system.TextChanged+=(_,_)=>systemDirty=section=="系统提示词"&&system.Text!=Runtime.Settings.SystemPrompt;
         PreviewKeyDown+=RecordKey;
         ShowSection();
     }
-    private void Card(string heading,params UIElement[] elements){var box=new StackPanel();box.Children.Add(Ui.Text(heading,16));foreach(var element in elements)box.Children.Add(element);content.Children.Add(Ui.Card(box));}
+    private void Card(string heading,params UIElement[] elements){var box=new StackPanel();box.Children.Add(Ui.Text(heading,16));foreach(var element in elements){if(element is FrameworkElement e)e.Margin=new Thickness(e.Margin.Left,Math.Max(12,e.Margin.Top),e.Margin.Right,e.Margin.Bottom);box.Children.Add(element);}content.Children.Add(Ui.Card(box));}
     private CheckBox Toggle(string label,bool value,Action<bool> save)
     {
-        var check=new CheckBox{Content=label,IsChecked=value,Foreground=BloomTheme.Text,Margin=new Thickness(0,9,0,9)};bool changing=false;
+        var check=new BloomSwitch{Content=label,IsChecked=value,Foreground=BloomTheme.Text,Margin=new Thickness(0,9,0,9)};bool changing=false;
         check.Click+=(_,_)=>{if(changing)return;try{save(check.IsChecked==true);Feedback.Text="已保存";}catch(Exception e){changing=true;check.IsChecked=!check.IsChecked;changing=false;Feedback.Text=Ui.Error(e);}};return check;
     }
     private ComboBox Choices<T>(IEnumerable<T> items,T selected,Action<T> save)where T:notnull
@@ -40,11 +41,16 @@ internal sealed class SettingsPane:BloomPage
     }
     private void ShowSection()
     {
-        StopRecording();content.Children.Clear();Feedback.Text="";
+        StopRecording();content.Children.Clear();Feedback.Text="";sectionNav.Select(section);BloomTheme.Enter(content);
         switch(section){case "通用":General();break;case "顶部标签":Tabs();break;case "剪贴板":ClipboardSettings();break;case "存储与隐私":Storage();break;case "AI 接口":AI();break;case "系统提示词":SystemPrompt();break;default:About();break;}
     }
     private void General()
     {
+        var themes=new BloomNavigation(horizontal:true);
+        foreach(var choice in new[]{("dark","深色","moon"),("light","浅色","sun")}){
+            themes.Add(choice.Item1,choice.Item2,choice.Item3,async()=>{if(Runtime.ChangeAppearance is not null){var task=Runtime.ChangeAppearance(choice.Item1,themes.ElementFor(choice.Item1));themes.Select(Runtime.Settings.Appearance);await task;}});
+        }
+        themes.Select(Runtime.Settings.Appearance);Card("界面外观",Ui.Nav(themes));
         var shortcut=Ui.Text(Runtime.Settings.Shortcut.Label,15,BloomTheme.Blue);
         recordButton=Ui.Button("录制快捷键",()=>{recording=true;candidate=null;recordButton!.Content="请按 Ctrl / Alt 加另一个键…";recordButton.Focus();return Task.CompletedTask;});
         var apply=Ui.Button("应用快捷键",()=>Run(()=>{if(candidate is null)throw new InvalidOperationException("先录制一组快捷键。");ApplyShortcut(candidate);Feedback.Text="快捷键已更新";return Task.CompletedTask;}));
@@ -141,10 +147,10 @@ internal sealed class SettingsPane:BloomPage
     {
         const string releases="https://github.com/FengLi-AI/JotBloom-Notch-Assistant/releases";
         Card("萌生 · JotBloom",Ui.Text("给闪过的想法，一点空间。",18,BloomTheme.Blue),Ui.Text("记下来，然后继续手头的事。",12,BloomTheme.Muted),Ui.Button("产品官网 ↗",()=>Visit("https://fengli-ai.github.io/JotBloom-Notch-Assistant/")));
-        Card("版本 "+AppRuntime.Version,Ui.Button("检查最新 Windows 版本",()=>Run(async()=>{Feedback.Text="正在检查…";using var http=new HttpClient{Timeout=TimeSpan.FromSeconds(15)};http.DefaultRequestHeaders.UserAgent.ParseAdd("JotBloom-Windows/1.0.2");using var response=await http.GetAsync("https://api.github.com/repos/FengLi-AI/JotBloom-Notch-Assistant/releases?per_page=20",HttpCompletionOption.ResponseHeadersRead);response.EnsureSuccessStatusCode();await using var stream=await response.Content.ReadAsStreamAsync();using var json=await JsonDocument.ParseAsync(stream);var matches=json.RootElement.EnumerateArray().Where(r=>!r.GetProperty("draft").GetBoolean()&&r.GetProperty("assets").EnumerateArray().Any(a=>{string n=a.GetProperty("name").GetString()??"";return n.Contains("Windows",StringComparison.OrdinalIgnoreCase)&&n.EndsWith(".exe",StringComparison.OrdinalIgnoreCase);})).ToArray();Feedback.Text=matches.Length==0?"暂未发布 Windows 更新，可在版本页面查看后续版本。":"找到 Windows 发布版本："+matches[0].GetProperty("tag_name").GetString()+"。请打开版本页面核对并下载。";})),Ui.Button("打开版本页面 ↗",()=>Visit(releases)),Ui.Text("检查时连接 GitHub；下载后由你安装。",12,BloomTheme.Muted));
+        Card("版本 "+AppRuntime.Version,Ui.Button("检查最新 Windows 版本",()=>Run(async()=>{Feedback.Text="正在检查…";using var http=new HttpClient{Timeout=TimeSpan.FromSeconds(15)};http.DefaultRequestHeaders.UserAgent.ParseAdd("JotBloom-Windows/1.0.4");using var response=await http.GetAsync("https://api.github.com/repos/FengLi-AI/JotBloom-Notch-Assistant/releases?per_page=20",HttpCompletionOption.ResponseHeadersRead);response.EnsureSuccessStatusCode();await using var stream=await response.Content.ReadAsStreamAsync();using var json=await JsonDocument.ParseAsync(stream);var matches=json.RootElement.EnumerateArray().Where(r=>!r.GetProperty("draft").GetBoolean()&&r.GetProperty("assets").EnumerateArray().Any(a=>{string n=a.GetProperty("name").GetString()??"";return n.Contains("Windows",StringComparison.OrdinalIgnoreCase)&&n.EndsWith(".exe",StringComparison.OrdinalIgnoreCase);})).ToArray();Feedback.Text=matches.Length==0?"暂未发布 Windows 更新，可在版本页面查看后续版本。":"找到 Windows 发布版本："+matches[0].GetProperty("tag_name").GetString()+"。请打开版本页面核对并下载。";})),Ui.Button("打开版本页面 ↗",()=>Visit(releases)),Ui.Text("检查时连接 GitHub；下载后由你安装。",12,BloomTheme.Muted));
         Card("作者",Ui.Text("李烽立｜Li Fengli"),Ui.Button("邮箱：qq204407676@gmail.com",()=>Visit("mailto:qq204407676@gmail.com")),Ui.Text("微信：feNgL1999_"),Ui.Button("小红书：FengLiAi · 个人主页 ↗",()=>Visit("https://www.xiaohongshu.com/user/profile/69b6dd97000000003303a64d")),Ui.Text("抖音号：N24642464（在抖音内搜索）"),Ui.Text("遇到 Bug 或有功能建议，欢迎通过以上方式联系作者。谢谢你帮助萌生变得更好。",12,BloomTheme.Muted));
     }
-    private Task Visit(string url)=>Run(()=>{AppRuntime.OpenLink(url);return Task.CompletedTask;});
+    private Task Visit(string url)=>Run(async()=>{await FlushAsync();AppRuntime.OpenLink(url);if(Runtime.HidePanel is not null)await Runtime.HidePanel();});
 }
 internal static class AutoStart
 {

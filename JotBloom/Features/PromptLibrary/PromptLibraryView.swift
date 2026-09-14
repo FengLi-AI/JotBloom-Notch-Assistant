@@ -5,6 +5,7 @@ import SwiftUI
 struct PromptLibraryView: View {
     @ObservedObject var model: PromptLibraryViewModel
     @Environment(\.bloomExpanded) private var expanded
+    @Environment(\.bloomReduceMotion) private var reduceMotion
     @State private var listFocused = false
     @StateObject private var libraryDrag = BloomLibraryDrag()
     @FocusState private var titleFocused: Bool
@@ -17,23 +18,23 @@ struct PromptLibraryView: View {
     private var editor: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Button { _ = model.returnFromDetail() } label: { Label("返回\(model.editorBackName)", systemImage: "chevron.left") }
+                Button { _ = model.returnFromDetail() } label: { BloomActionLabel(title: "返回\(model.editorBackName)", symbol: "chevron.left") }
                     .buttonStyle(BloomButtonStyle())
                 Text("编辑提示词").modifier(BloomType(size: 20, weight: .semibold))
                 Spacer()
-                Text(model.busy ? "正在处理…" : model.hasUnsavedDetail ? "未保存" : "已保存").font(.system(size: 11)).foregroundStyle(BloomTheme.muted)
+                Text(model.busy ? "正在处理…" : model.hasUnsavedDetail ? "未保存" : "已保存").font(BloomTypography.font(11)).foregroundStyle(BloomTheme.muted)
             }
-            Text("标题").font(.system(size: 12)).foregroundStyle(BloomTheme.muted)
+            Text("标题").font(BloomTypography.font(12)).foregroundStyle(BloomTheme.muted)
             TextField("提示词标题", text: $model.detailTitle).textFieldStyle(.plain)
-                .font(.system(size: 15)).padding(14).modifier(BloomSurface(color: BloomTheme.well, radius: 16))
+                .font(BloomTypography.font(15)).padding(14).modifier(BloomSurface(color: BloomTheme.well, radius: 16))
                 .accessibilityLabel("提示词标题").disabled(model.busy)
-            Text("正文").font(.system(size: 12)).foregroundStyle(BloomTheme.muted)
-            TextEditor(text: $model.detailContent).font(.system(size: 14)).scrollContentBackground(.hidden)
+            Text("正文").font(BloomTypography.font(12)).foregroundStyle(BloomTheme.muted)
+            TextEditor(text: $model.detailContent).font(BloomTypography.font(14)).scrollContentBackground(.hidden)
                 .focused($detailFocused).onAppear { detailFocused = true }
                 .padding(12).modifier(BloomSurface(color: BloomTheme.well, radius: 20))
                 .accessibilityLabel("提示词完整正文").disabled(model.busy)
             Text(model.feedback ?? "保存覆盖当前条目；另存会创建独立新条目。")
-                .font(.system(size: 11)).foregroundStyle(BloomTheme.muted).lineLimit(2).frame(minHeight: 30, alignment: .leading)
+                .font(BloomTypography.font(11)).foregroundStyle(BloomTheme.muted).lineLimit(2).frame(minHeight: 30, alignment: .leading)
             if model.savedCopyID != nil {
                 Button("查看新副本") { model.viewSavedCopy() }
                     .buttonStyle(BloomButtonStyle()).disabled(model.busy)
@@ -42,7 +43,7 @@ struct PromptLibraryView: View {
             HStack(spacing: 10) {
                 Button("保存") { saveDetail(asNew: false) }.buttonStyle(BloomButtonStyle(primary: true)).keyboardShortcut("s", modifiers: .command)
                 Button("另存为新提示词") { saveDetail(asNew: true) }.buttonStyle(BloomButtonStyle())
-                Button { model.copyDetail() } label: { Label("复制", systemImage: "doc.on.doc") }.buttonStyle(BloomButtonStyle())
+                Button { model.copyDetail() } label: { BloomActionLabel(title: "复制", symbol: "doc.on.doc") }.buttonStyle(BloomButtonStyle())
                     .help("复制编辑区正文，不保存、不收起面板")
                 Spacer(minLength: 0)
                 if model.hasUnsavedDetail {
@@ -58,21 +59,36 @@ struct PromptLibraryView: View {
     private var list: some View {
         VStack(spacing: 8) {
             HStack {
-                Text("提示词库").modifier(BloomType(size: expanded ? 20 : 16, weight: .semibold))
+                Text("提示词库").font(BloomTypography.font(17, role: .label))
                 Spacer()
-                Text("已加载 \(model.items.count) 条").font(.system(size: 11)).foregroundStyle(BloomTheme.muted)
-            }.frame(height: 24)
-            Picker("提示词范围", selection: $model.favoritesOnly) {
-                Text("全部").tag(false)
-                Text("常用").tag(true)
-            }.pickerStyle(.segmented).labelsHidden().frame(width: 170)
+                Text("已加载 \(model.items.count) 条").font(BloomTypography.font(11)).foregroundStyle(BloomTheme.muted)
+            }.frame(height: 32)
+            HStack(spacing: 4) {
+                ForEach([false, true], id: \.self) { favorites in
+                    Button { model.favoritesOnly = favorites } label: {
+                        BloomActionLabel(title: favorites ? "常用" : "全部", symbol: favorites ? "star" : "layout-grid")
+                            .font(BloomTypography.font(11, role: .label))
+                            .frame(width: 78, height: 30)
+                            .foregroundStyle(model.favoritesOnly == favorites ? Color.white : BloomTheme.muted)
+                            .contentShape(Rectangle())
+                    }.buttonStyle(.plain)
+                        .accessibilityAddTraits(model.favoritesOnly == favorites ? [.isSelected] : [])
+                }
+            }
+            .background(alignment: .leading) {
+                BloomSelectionSurface(radius: 10).frame(width: 78, height: 30)
+                    .offset(x: model.favoritesOnly ? 82 : 0)
+                    .animation(reduceMotion ? nil : BloomTheme.selectionAnimation, value: model.favoritesOnly)
+                    .bloomMeasure("promptSelection")
+            }
+            .padding(4).background(BloomTheme.shell, in: RoundedRectangle(cornerRadius: 14))
                 .frame(maxWidth: .infinity, alignment: .leading).disabled(model.busy)
             GeometryReader { geometry in
                 Group {
                     if model.items.isEmpty {
                         VStack(spacing: 12) {
                             Text(model.isLoading ? "正在读取…" : model.favoritesOnly ? "还没有常用提示词，点列表星标加入" : "暂无内容")
-                            Text("从灵感输入或剪贴板保存你的常用提示词").font(.system(size: 11))
+                            Text("从灵感输入或剪贴板保存你的常用提示词").font(BloomTypography.font(11))
                             if model.favoritesOnly { Button("查看全部提示词") { model.favoritesOnly = false }.buttonStyle(BloomButtonStyle()) }
                             if model.feedback != nil { Button("重新读取") { model.refresh() }.buttonStyle(BloomButtonStyle()) }
                         }.foregroundStyle(BloomTheme.muted).frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -91,13 +107,13 @@ struct PromptLibraryView: View {
                 }.frame(width: geometry.size.width, height: geometry.size.height).clipped()
                     .modifier(BloomListFocusOutline(isFocused: listFocused && model.editingID == nil))
             }
-            HStack(spacing: 8) {
-                Text(model.feedback ?? "点击整行 / Enter 编辑 · 复制请点行内按钮 · ⌘⌫ 删除").font(.system(size: 10)).foregroundStyle(BloomTheme.muted).lineLimit(2)
+            HStack(alignment: .bottom, spacing: 8) {
+                Text(model.feedback ?? "点击整行 / Enter 编辑 · 复制请点行内按钮 · ⌘⌫ 删除").font(BloomTypography.font(10)).foregroundStyle(BloomTheme.muted).lineLimit(2).bloomMeasure("promptFooterText")
                 if model.canUndo { Button("撤销") { model.undoDeletion() }.buttonStyle(.plain).foregroundStyle(BloomTheme.blue) }
                 if model.savedCopyID != nil { Button("查看新副本") { model.viewSavedCopy() }.buttonStyle(.plain).foregroundStyle(BloomTheme.blue).disabled(model.busy) }
                 Spacer(minLength: 0)
-            }.frame(height: 34).padding(.trailing, 32)
-        }.padding(.horizontal, 16).padding(.top, 12)
+            }.frame(height: 34, alignment: .bottom).padding(.trailing, 42)
+        }.padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 16)
             .background(BloomListFocusTarget(request: model.focusRequest, isFocused: $listFocused))
             .onChange(of: titleFocused) { focused in
                 if !focused, model.editingID != nil, !model.flushEdit() { titleFocused = true }
@@ -115,15 +131,15 @@ struct PromptLibraryView: View {
             } else {
                 Button { model.openEditor(prompt.id) } label: {
                     HStack(spacing: 10) {
-                        Image(systemName: "text.badge.star").font(.system(size: 16)).foregroundStyle(BloomTheme.blue)
+                        BloomSymbol("text.badge.star", size: 16).foregroundStyle(BloomTheme.blue)
                             .frame(width: 32, height: 32).background(BloomTheme.raised, in: RoundedRectangle(cornerRadius: 11))
                             .accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: 4) {
                             Text(prompt.title).modifier(BloomType(size: expanded ? 14 : 12)).foregroundStyle(BloomTheme.text).lineLimit(1)
-                            Text(String(prompt.content.prefix(160))).font(.system(size: 10)).foregroundStyle(BloomTheme.muted).lineLimit(1)
+                            Text(String(prompt.content.prefix(160))).font(BloomTypography.font(10)).foregroundStyle(BloomTheme.muted).lineLimit(1)
                         }.frame(maxWidth: .infinity, alignment: .leading)
                         Text(SavedTime.text(prompt.createdAtUTCms))
-                            .font(.system(size: 10)).foregroundStyle(BloomTheme.muted).lineLimit(1)
+                            .font(BloomTypography.font(10)).foregroundStyle(BloomTheme.muted).lineLimit(1)
                     }.frame(maxWidth: .infinity, maxHeight: .infinity).contentShape(Rectangle())
                 }.buttonStyle(.plain).disabled(model.busy)
             }
@@ -135,6 +151,7 @@ struct PromptLibraryView: View {
         }.buttonStyle(.plain).foregroundStyle(BloomTheme.muted)
             .padding(.horizontal, 12).frame(height: expanded ? 58 : 48)
             .modifier(BloomSurface(color: model.selectedID == prompt.id ? BloomTheme.selected : BloomTheme.well, radius: expanded ? 20 : 14))
+            .animation(reduceMotion ? nil : BloomTheme.layoutAnimation, value: expanded)
             .modifier(BloomReorder(id: prompt.id, drag: libraryDrag))
             .contextMenu {
                 if let index = model.items.firstIndex(where: { $0.id == prompt.id }) {

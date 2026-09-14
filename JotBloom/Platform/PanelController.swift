@@ -26,6 +26,7 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
     private var restoringSystemFocus = false
     private var suspendedForDirectorySelection = false
     private var restoreAfterDirectorySelection = false
+    private var appearanceReveal: BloomThemeRevealView?
     private var closingVisual: NSWindow?
     private var frameAnimationTimer: Timer?
     private var currentMetrics: ScreenMetrics?
@@ -58,6 +59,7 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         self.promptModel = promptModel
         self.chatModel = chatModel
         super.init()
+        panelState.onChangeAppearance = { [weak self] appearance, rect in self?.changeAppearance(appearance, controlRect: rect) }
         settingsModel?.onShortcutRecordingChanged = { [weak self] active in self?.setShortcutRecording(active) }
         chatModel?.onSystemInteraction = { [weak self] in self?.setSystemInteraction($0) }
         chatModel?.onAccepted = { [weak self] in
@@ -120,7 +122,9 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
             .store(in: &cancellables)
 
         panelState.$preferences.dropFirst().sink { [weak self] preferences in
-            guard let self, preferences.reduceMotion else { return }
+            guard let self else { return }
+            panel.appearance = NSAppearance(named: preferences.appearance == .dark ? .darkAqua : .aqua)
+            guard preferences.reduceMotion else { return }
             resizePanel(expanded: panelState.isExpanded, animated: false)
             panel.alphaValue = 1
             closingVisual?.close()
@@ -142,6 +146,429 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
     }
 
 #if DEBUG
+    /// Sample intermediate layout, not only the final 300/700-point window frame.
+    func debugPolishLayoutProbe(output: URL) async throws -> [(String, Bool)] {
+        guard ProcessInfo.processInfo.environment["JOTBLOOM_POLISH_SMOKE"] == "1" else { return [] }
+        var checks: [(String, Bool)] = []
+        var samples: [[String: Double]] = []
+        func settle() async throws { try await Task.sleep(nanoseconds: 500_000_000) }
+        func trace(_ name: String, expanding: Bool, action: () -> Void) async throws {
+            let top = panel.frame.maxY
+            var previous = panel.frame.height
+            var monotonic = true, topFixed = true, chromeFixed = true, headerFixed = true, shadowFollows = true
+            var measuredHeaderFrames = 0
+            let expectedHeaderY = panelState.notchHeight + (name.contains("settings") ? 16 : 12)
+            action()
+            for index in 0..<26 {
+                try await Task.sleep(nanoseconds: 16_000_000)
+                panel.contentView?.layoutSubtreeIfNeeded()
+                let height = panel.frame.height
+                if index == 0 { print("EDGE_SHADOW_FRAME", name, panel.frame, panel.childWindows?.first?.frame as Any) }
+                shadowFollows = shadowFollows && panel.childWindows?.first?.frame == panel.frame.insetBy(dx: -18, dy: -18)
+                monotonic = monotonic && (expanding ? height >= previous - 0.5 : height <= previous + 0.5)
+                topFixed = topFixed && abs(panel.frame.maxY - top) < 0.5
+                let chromeY = BloomLayoutDiagnostics.frames["chrome"]?.minY ?? -999
+                let headerY = BloomLayoutDiagnostics.frames[name.contains("settings") ? "settingsHeader" : "libraryHeader"]?.minY ?? -999
+                chromeFixed = chromeFixed && abs(chromeY) < 0.5
+                // A newly mounted SwiftUI header publishes its first measurement asynchronously.
+                // Missing data is not a position; still require at least 25 of the 26 samples.
+                if headerY != -999 {
+                    measuredHeaderFrames += 1
+                    headerFixed = headerFixed && abs(headerY - expectedHeaderY) < 0.5
+                }
+                samples.append(["height": height, "chromeY": chromeY, "headerY": headerY, "frame": Double(index)])
+                if [0, 5, 12, 25].contains(index) {
+                    try debugCapturePromptPanel(to: output.appendingPathComponent("polish-\(name)-\(index).png"))
+                }
+                previous = height
+            }
+            checks += [(name + "_height_monotonic", monotonic), (name + "_window_top_fixed", topFixed),
+                       (name + "_chrome_fixed", chromeFixed), (name + "_title_fixed", headerFixed && measuredHeaderFrames >= 25), (name + "_shadow_follows", shadowFollows)]
+        }
+        requestSelectTab(.inspirationLibrary); panelState.collapse(); try await settle()
+        try await trace("library-expand", expanding: true) { panelState.expand() }
+        try await trace("library-collapse", expanding: false) { panelState.collapse() }
+        for tab: PanelTab in [.clipboard, .prompts, .inspirationLibrary] {
+            requestSelectTab(tab); panelState.collapse(); try await settle()
+            try await trace("settings-from-" + tab.rawValue, expanding: true) { openSettings() }
+            closeSettings(); try await settle()
+        }
+        requestSelectTab(.inspiration); panelState.collapse(); try await settle()
+        inspirationViewModel.text = "想给每周的灵感留五分钟。先选出一条还想继续的，写下下一步。"
+        try await settle()
+        if let input = BloomLayoutDiagnostics.frames["inspirationInput"],
+           let actions = BloomLayoutDiagnostics.frames["inspirationActions"],
+           let header = BloomLayoutDiagnostics.frames["captureHeader"] {
+            checks.append(("input_to_actions_12", abs(actions.minY - input.maxY - 12) < 0.5))
+            checks.append(("actions_bottom_inset_16", abs(panel.frame.height - actions.maxY - 16) < 0.5))
+            checks.append(("capture_header_top_inset_10", abs(header.minY - input.minY - 10) < 0.5))
+        } else { checks.append(("input_metrics_available", false)) }
+        try debugCapturePromptPanel(to: output.appendingPathComponent("polish-input-populated.png"))
+        let data = try JSONSerialization.data(withJSONObject: samples, options: [.prettyPrinted, .sortedKeys])
+        try data.write(to: output.appendingPathComponent("polish-motion-samples.json"))
+        return checks
+    }
+
+    func debugUI13Probe(output: URL) async throws -> [(String, Bool)] {
+        guard ProcessInfo.processInfo.environment["JOTBLOOM_UI13_SMOKE"] == "1" else { return [] }
+        var checks: [(String, Bool)] = []
+        func pause(_ ms: UInt64 = 520) async throws { try await Task.sleep(nanoseconds: ms * 1_000_000) }
+        func blueCenter(_ name: String, region: CGRect, horizontal: Bool = false) throws -> Double {
+            let url = output.appendingPathComponent(name + ".png")
+            try debugCapturePromptPanel(to: url)
+            let bitmap = NSBitmapImageRep(data: try Data(contentsOf: url))!
+            let scale = Double(bitmap.pixelsWide) / panel.frame.width
+            var total = 0.0, count = 0.0
+            for y in stride(from: Int(region.minY * scale), to: Int(region.maxY * scale), by: 3) {
+                for x in stride(from: Int(region.minX * scale), to: Int(region.maxX * scale), by: 3) {
+                    guard x < bitmap.pixelsWide, y < bitmap.pixelsHigh,
+                          let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else { continue }
+                    if color.blueComponent > 0.38 && color.blueComponent > color.redComponent * 1.6 && color.blueComponent > color.greenComponent * 1.2 {
+                        total += Double(horizontal ? x : y) / scale; count += 1
+                    }
+                }
+            }
+            return count > 0 ? total / count : -1000
+        }
+        requestSelectTab(.inspirationLibrary); panelState.expand(); inspirationLibraryViewModel.filter(nil); try await pause()
+        let region = CGRect(x: 20, y: 78, width: 74, height: 350)
+        let start = try blueCenter("ui13-category-start", region: region)
+        inspirationLibraryViewModel.filter(.product)
+        var positions: [Double] = []
+        for index in 0..<5 {
+            try await pause(60)
+            positions.append(try blueCenter("ui13-category-motion-\(index)", region: region))
+        }
+        try await pause()
+        let end = try blueCenter("ui13-category-end", region: region)
+        checks.append(("ui13_category_visible_intermediate_positions", positions.filter { $0 > start + 5 && $0 < end - 5 }.count >= 2))
+        checks.append(("ui13_category_reaches_product", end - start > 190 && end - start < 230))
+        inspirationLibraryViewModel.filter(.article); try await pause(100)
+        inspirationLibraryViewModel.filter(.idea); try await pause()
+        checks.append(("ui13_rapid_filter_keeps_latest_state", inspirationLibraryViewModel.filterCategory == .idea))
+        try debugCapturePromptPanel(to: output.appendingPathComponent("ui13-category-interrupted-end.png"))
+        requestSelectTab(.prompts); promptModel?.favoritesOnly = false; try await pause()
+        let promptRegion = CGRect(x: 16, y: 80, width: 175, height: 44)
+        let promptStart = try blueCenter("ui13-prompt-start", region: promptRegion, horizontal: true)
+        promptModel?.favoritesOnly = true; try await pause(140)
+        let promptMiddle = try blueCenter("ui13-prompt-middle", region: promptRegion, horizontal: true)
+        try await pause()
+        let promptEnd = try blueCenter("ui13-prompt-end", region: promptRegion, horizontal: true)
+        checks.append(("ui13_prompt_selection_slides", promptMiddle > promptStart + 3 && promptMiddle < promptEnd - 3 && abs(promptEnd - promptStart - 82) < 4))
+        requestSelectTab(.globalSearch); globalSearchViewModel.selectScope(.all); try await pause()
+        let searchRegion = CGRect(x: 16, y: 82, width: 408, height: 33)
+        let searchStart = try blueCenter("ui13-search-start", region: searchRegion, horizontal: true)
+        globalSearchViewModel.selectScope(.prompt); try await pause(140)
+        let searchMiddle = try blueCenter("ui13-search-middle", region: searchRegion, horizontal: true)
+        try await pause()
+        let searchEnd = try blueCenter("ui13-search-end", region: searchRegion, horizontal: true)
+        checks.append(("ui13_search_selection_slides", searchMiddle > searchStart + 3 && searchMiddle < searchEnd - 3 && searchEnd > searchStart + 100))
+        openSettings(); panelState.settingsSection = "general"; try await pause()
+        let settingsRegion = CGRect(x: 20, y: 100, width: 114, height: 322)
+        let settingsStart = try blueCenter("ui13-settings-start", region: settingsRegion)
+        panelState.settingsSection = "storage"; try await pause(140)
+        let settingsMiddle = try blueCenter("ui13-settings-middle", region: settingsRegion)
+        try await pause()
+        let settingsEnd = try blueCenter("ui13-settings-end", region: settingsRegion)
+        checks.append(("ui13_settings_selection_slides", settingsMiddle > settingsStart + 3 && settingsMiddle < settingsEnd - 3 && abs(settingsEnd - settingsStart - 138) < 4))
+        panelState.settingsSection = "general"; try await pause()
+        func indicators(_ view: NSView) -> [BloomScrollIndicator] {
+            (view as? BloomScrollIndicator).map { [$0] } ?? view.subviews.flatMap(indicators)
+        }
+        if let content = panel.contentView, let indicator = indicators(content).max(by: {
+            ($0.scroll?.documentView?.bounds.height ?? 0) < ($1.scroll?.documentView?.bounds.height ?? 0)
+        }), let scroll = indicator.scroll {
+            checks.append(("ui13_system_scrollbar_replaced", !scroll.hasVerticalScroller))
+            scroll.contentView.scroll(to: .init(x: 0, y: 120)); scroll.reflectScrolledClipView(scroll.contentView)
+            try await pause(60)
+            checks.append(("ui13_scrollbar_slides_in", indicator.shown && indicator.debugSlide > 0 && indicator.debugSlide < 10))
+            try await pause(300)
+            checks.append(("ui13_scrollbar_thin_visible", indicator.shown && indicator.debugThumbRect.width == 3 && indicator.debugSlide == 0))
+            try debugCapturePromptPanel(to: output.appendingPathComponent("ui13-scrollbar-visible.png"))
+            let origin = scroll.contentView.bounds.minY
+            let thumb = indicator.debugThumbRect
+            let hitPoint = indicator.convert(.init(x: thumb.midX, y: thumb.midY), to: indicator.superview)
+            checks.append(("ui13_scrollbar_hit_target", indicator.hitTest(hitPoint) === indicator))
+            let point = indicator.convert(.init(x: thumb.midX, y: thumb.midY), to: nil)
+            func mouse(_ type: NSEvent.EventType, point: NSPoint) -> NSEvent {
+                NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                    windowNumber: panel.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+            }
+            indicator.mouseDown(with: mouse(.leftMouseDown, point: point))
+            let destination = indicator.convert(.init(x: thumb.midX, y: thumb.midY + 35), to: nil)
+            indicator.mouseDragged(with: mouse(.leftMouseDragged, point: destination))
+            indicator.mouseUp(with: mouse(.leftMouseUp, point: destination))
+            checks.append(("ui13_scrollbar_drag_moves_document", scroll.contentView.bounds.minY > origin + 20))
+            try await pause(1300)
+            checks.append(("ui13_scrollbar_lingers", indicator.shown))
+            try await pause(800)
+            checks.append(("ui13_scrollbar_slides_out", !indicator.shown && indicator.debugSlide > 0 && indicator.debugSlide < 10))
+            try await pause(400)
+            checks.append(("ui13_scrollbar_hidden_after_idle", !indicator.shown && indicator.debugSlide == 10))
+            try debugCapturePromptPanel(to: output.appendingPathComponent("ui13-scrollbar-idle.png"))
+            panelState.preferences.reduceMotion = true; try await pause(100)
+            scroll.contentView.scroll(to: .init(x: 0, y: 80)); scroll.reflectScrolledClipView(scroll.contentView)
+            try await pause(20)
+            checks.append(("ui13_reduced_motion_scrollbar_immediate", indicator.shown && indicator.debugSlide == 0))
+            panelState.preferences.reduceMotion = false
+        } else { checks.append(("ui13_scrollbar_installed", false)) }
+        panelState.settingsSection = "about"; try await pause()
+        try debugCapturePromptPanel(to: output.appendingPathComponent("ui13-about.png"))
+        closeSettings(); requestSelectTab(.inspiration); panelState.collapse(); try await pause()
+        try debugCapturePromptPanel(to: output.appendingPathComponent("ui13-input.png"))
+        let data = try JSONSerialization.data(withJSONObject: ["categoryStart": start, "categoryEnd": end, "intermediateCenters": positions], options: .prettyPrinted)
+        try data.write(to: output.appendingPathComponent("ui13-selection-motion.json"))
+        return checks
+    }
+
+    func debugUI12Probe(output: URL) async throws -> [(String, Bool)] {
+        guard ProcessInfo.processInfo.environment["JOTBLOOM_UI12_SMOKE"] == "1" else { return [] }
+        var checks: [(String, Bool)] = []
+        func settle() async throws { try await Task.sleep(nanoseconds: 480_000_000) }
+        func matches(_ expanded: Bool) -> Bool {
+            panelState.isExpanded == expanded && currentMetrics.map {
+                panel.frame == PanelGeometry.panelFrame(for: $0, expanded: expanded)
+            } == true
+        }
+        for normal: PanelTab in [.inspiration, .clipboard, .prompts, .inspirationLibrary] {
+            for expanded in [false, true] {
+                for first: PanelTab in [.chat, .globalSearch] {
+                    requestSelectTab(normal); debugSetExpanded(expanded); try await settle()
+                    requestSelectTab(first); try await settle()
+                    let entered = matches(true)
+                    requestSelectTab(first == .chat ? .globalSearch : .chat); try await settle()
+                    let crossed = matches(true)
+                    openSettings(); try await settle(); closeSettings(); try await settle()
+                    requestSelectTab(normal); try await settle()
+                    checks.append(("ui12_\(normal.rawValue)_\(expanded)_via_\(first.rawValue)", entered && crossed && matches(expanded)))
+                }
+            }
+        }
+        checks.append(("ui12_bundled_misans", BloomTypography.bundledFontsAvailable))
+        checks.append(("ui12_labels_regular", BloomTypography.nsFont(12, role: .label).fontName == "MiSans-Regular"))
+        checks.append(("ui12_body_normal", BloomTypography.nsFont(12).fontName == "MiSans-Normal"))
+        requestSelectTab(.inspiration); panelState.collapse(); try await settle()
+        inspirationViewModel.text = "给闪过的想法，一点空间。记录下来，然后继续手头的事。"
+        try await settle()
+        try debugCapturePromptPanel(to: output.appendingPathComponent("ui12-gradient-a.png"))
+        try await Task.sleep(nanoseconds: 3_000_000_000)
+        try debugCapturePromptPanel(to: output.appendingPathComponent("ui12-gradient-b.png"))
+        requestSelectTab(.inspirationLibrary); try await settle()
+        try debugCapturePromptPanel(to: output.appendingPathComponent("ui12-library.png"))
+        openSettings(); panelState.settingsSection = "about"; try await settle()
+        try debugCapturePromptPanel(to: output.appendingPathComponent("ui12-about.png"))
+        closeSettings()
+        return checks
+    }
+
+    func debugThemeProbe(output: URL) async throws -> [(String, Bool)] {
+        var checks: [(String, Bool)] = []
+        let original = panelState.preferences
+        let dismissalWasEnabled = automaticDismissalEnabled
+        automaticDismissalEnabled = false
+        defer { panelState.preferences = original; automaticDismissalEnabled = dismissalWasEnabled }
+        func settle() async throws { try await Task.sleep(nanoseconds: 600_000_000) }
+        inspirationViewModel.text = "给闪过的想法，一点空间。\n记下来，然后继续手头的事。"
+        chatModel?.draft = "把这周值得继续的灵感，留到周五再看看。"
+        for appearance in PanelAppearance.allCases {
+            panelState.preferences.appearance = appearance
+            try await settle()
+            let prefix = appearance.rawValue
+            checks.append((prefix + "_native_appearance", panel.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == (appearance == .dark ? .darkAqua : .aqua)))
+            for expanded in [false, true] {
+                requestSelectTab(.inspiration); panelState.collapse(); try await settle()
+                if expanded { panelState.expand(); try await settle() }
+                for tab: PanelTab in [.inspiration, .clipboard, .prompts, .inspirationLibrary, .chat, .globalSearch] {
+                    requestSelectTab(tab); try await settle()
+                    let label = prefix + "-" + tab.rawValue + (expanded ? "-expanded" : "-default")
+                    let url = output.appendingPathComponent(label + ".png")
+                    try debugCapturePromptPanel(to: url)
+                    let bitmap = NSBitmapImageRep(data: try Data(contentsOf: url))!
+                    // Sample the unadorned page background, not just a resolved palette token.
+                    let color = bitmap.colorAt(x: bitmap.pixelsWide - 10, y: bitmap.pixelsHigh / 2)!.usingColorSpace(.deviceRGB)!
+                    checks.append((label + "_rendered_palette", appearance == .dark ? color.redComponent < 0.18 : color.redComponent > 0.80 && color.redComponent < 0.995))
+                    let bottom = BloomLayoutDiagnostics.frames["panelFooterControls"]?.maxY ?? -999
+                    checks.append((label + "_bottom_16", abs(panel.frame.height - bottom - 16) < 0.5))
+                    checks.append((label + "_expansion", panelState.isExpanded == (expanded || tab == .chat || tab == .globalSearch)))
+                }
+                requestSelectTab(.clipboard); try await settle()
+                checks.append((prefix + "_returns_normal_size_" + String(expanded), panelState.isExpanded == expanded))
+            }
+            openSettings(); panelState.settingsSection = "general"; try await settle()
+            try debugCapturePromptPanel(to: output.appendingPathComponent(prefix + "-settings.png"))
+            let frame = panel.frame
+            let draft = inspirationViewModel.text
+            let chatDraft = chatModel?.draft
+            panelState.preferences.appearance = appearance == .dark ? .light : .dark
+            try await settle()
+            checks.append((prefix + "_switch_preserves_settings_frame_and_drafts", panel.frame == frame && panelState.isSettingsOpen && panelState.settingsSection == "general" && inspirationViewModel.text == draft && chatModel?.draft == chatDraft))
+            panelState.preferences.appearance = appearance
+            for section in ["ai", "systemPrompt", "about"] {
+                panelState.settingsSection = section; try await settle()
+                try debugCapturePromptPanel(to: output.appendingPathComponent(prefix + "-settings-" + section + ".png"))
+            }
+            closeSettings(); try await settle()
+        }
+        print("THEME_OUTPUT", output.path)
+        return checks
+    }
+
+    func debugThemePolish11(output: URL, show: () -> Void) async throws -> [(String, Bool)] {
+        var checks: [(String, Bool)] = []
+        let previous = automaticDismissalEnabled; automaticDismissalEnabled = false
+        defer { automaticDismissalEnabled = previous }
+        func pause(_ ms: UInt64 = 500) async throws { try await Task.sleep(nanoseconds: ms * 1_000_000) }
+        for appearance in PanelAppearance.allCases {
+            panelState.preferences.appearance = appearance
+            requestSelectTab(.inspiration); panelState.collapse(); try await pause()
+            inspirationViewModel.text = "给闪过的想法，一点空间。"; try await pause()
+            try debugCapturePromptPanel(to: output.appendingPathComponent(appearance.rawValue + "-buttons-active.png"))
+            inspirationViewModel.text = ""; try await pause()
+            try debugCapturePromptPanel(to: output.appendingPathComponent(appearance.rawValue + "-buttons-disabled.png"))
+            for (tab, label): (PanelTab, String) in [(.clipboard, "clipboard"), (.prompts, "prompt"), (.inspirationLibrary, "library")] {
+                requestSelectTab(tab); try await pause()
+                let bottom = BloomLayoutDiagnostics.frames[label + "FooterText"]?.maxY ?? -999
+                checks.append((appearance.rawValue + "_" + label + "_description_bottom_16", abs(panel.frame.height - bottom - 16) < 0.5))
+                try debugCapturePromptPanel(to: output.appendingPathComponent(appearance.rawValue + "-" + label + ".png"))
+            }
+        }
+        panelState.preferences.appearance = .light
+        onRequestHide?(); try await pause(); show()
+        var alphas: [CGFloat] = []
+        for index in 0..<5 {
+            try await pause(45)
+            alphas.append(panel.alphaValue)
+            checks.append(("light_show_appearance_" + String(index), panel.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .aqua))
+            try debugCapturePromptPanel(to: output.appendingPathComponent("light-show-" + String(index) + ".png"))
+        }
+        checks.append(("light_show_alpha_monotonic", zip(alphas, alphas.dropFirst()).allSatisfy { $0 <= $1 }))
+        if let shadow = panel.childWindows?.first?.contentView,
+           let bitmap = shadow.bitmapImageRepForCachingDisplay(in: shadow.bounds) {
+            shadow.cacheDisplay(in: shadow.bounds, to: bitmap)
+            checks.append(("shadow_panel_interior_transparent", (bitmap.colorAt(x: bitmap.pixelsWide / 2, y: bitmap.pixelsHigh / 2)?.alphaComponent ?? 1) < 0.01))
+            try bitmap.representation(using: .png, properties: [:])?.write(to: output.appendingPathComponent("shadow-alpha.png"))
+        } else { checks.append(("shadow_available", false)) }
+        openSettings(); panelState.settingsSection = "general"; try await pause()
+        for target in [PanelAppearance.dark, .light] {
+            guard let frame = BloomLayoutDiagnostics.frames["appearanceControl"] else { checks.append(("control_measured", false)); continue }
+            let rect = NSRect(x: frame.minX, y: panel.frame.height - frame.maxY, width: frame.width, height: frame.height)
+            let draft = inspirationViewModel.text; let windowFrame = panel.frame
+            changeAppearance(target, controlRect: rect)
+            var radii: [CGFloat] = []
+            for index in 0..<5 {
+                try await pause(90)
+                if let reveal = appearanceReveal { radii.append(reveal.debugRadius) }
+                try debugCapturePromptPanel(to: output.appendingPathComponent("switch-" + target.rawValue + "-" + String(index) + ".png"))
+            }
+            checks.append((target.rawValue + "_reveal_expands", radii.count >= 3 && (radii.last ?? 0) > (radii.first ?? 0) + 50 && zip(radii, radii.dropFirst()).allSatisfy { $0 <= $1 }))
+            try await pause(1200)
+            checks.append((target.rawValue + "_reveal_cleanup", appearanceReveal == nil))
+            checks.append((target.rawValue + "_reveal_preserves_frame_draft", panel.frame == windowFrame && inspirationViewModel.text == draft && panelState.preferences.appearance == target))
+            try debugCapturePromptPanel(to: output.appendingPathComponent(target.rawValue + "-settings-end.png"))
+        }
+        panelState.preferences.reduceMotion = true
+        if let frame = BloomLayoutDiagnostics.frames["appearanceControl"] {
+            changeAppearance(.dark, controlRect: NSRect(x: frame.minX, y: panel.frame.height - frame.maxY, width: frame.width, height: frame.height))
+            checks.append(("reduced_motion_switch_immediate", appearanceReveal == nil && panelState.preferences.appearance == .dark))
+        }
+        print("POLISH11_OUTPUT", output.path)
+        return checks
+    }
+
+    func debugCircularThemeUpdate(output: URL) async throws -> [(String, Bool)] {
+        var checks: [(String, Bool)] = []
+        let previous = automaticDismissalEnabled; automaticDismissalEnabled = false
+        defer { automaticDismissalEnabled = previous }
+        func pause(_ ms: UInt64) async throws { try await Task.sleep(nanoseconds: ms * 1_000_000) }
+        openSettings(); panelState.settingsSection = "general"
+        panelState.preferences.appearance = .light; try await pause(500)
+        for target in [PanelAppearance.dark, .light] {
+            guard let frame = BloomLayoutDiagnostics.frames["appearanceControl"] else { checks.append(("control_measured", false)); continue }
+            let rect = NSRect(x: frame.minX, y: panel.frame.height - frame.maxY, width: frame.width, height: frame.height)
+            let originalFrame = panel.frame
+            changeAppearance(target, controlRect: rect)
+            try await pause(50)
+            checks.append((target.rawValue + "_control_opening_rounded", appearanceReveal?.debugRoundedControlOpening == true))
+            var radii: [CGFloat] = []
+            for _ in 0..<5 { try await pause(100); if let reveal = appearanceReveal { radii.append(reveal.debugRadius) } }
+            checks.append((target.rawValue + "_circle_expands", radii.count == 5 && (radii.last ?? 0) > (radii.first ?? 0) + 40 && zip(radii, radii.dropFirst()).allSatisfy { $0 <= $1 }))
+            try await pause(650)
+            checks.append((target.rawValue + "_continues_past_old_duration", appearanceReveal != nil))
+            try await pause(450)
+            checks.append((target.rawValue + "_completed_and_cleaned", appearanceReveal == nil && panelState.preferences.appearance == target && panel.frame == originalFrame))
+            try debugCapturePromptPanel(to: output.appendingPathComponent(target.rawValue + "-end.png"))
+        }
+        print("CIRCULAR_UPDATE_OUTPUT", output.path)
+        return checks
+    }
+
+    func debugReviewLifecycleProbe(show: () -> Void, toggle: () -> Void) async throws -> [(String, Bool)] {
+        var checks: [(String, Bool)] = []
+        func settle() async throws { try await Task.sleep(nanoseconds: 550_000_000) }
+        try await settle()
+        if ProcessInfo.processInfo.environment["JOTBLOOM_THEME_CIRCULAR_UPDATE"] == "1", let dataDirectory {
+            return try await debugCircularThemeUpdate(output: dataDirectory)
+        }
+        if ProcessInfo.processInfo.environment["JOTBLOOM_THEME_POLISH11"] == "1", let dataDirectory {
+            return try await debugThemePolish11(output: dataDirectory, show: show)
+        }
+        if ProcessInfo.processInfo.environment["JOTBLOOM_THEME_SMOKE"] == "1", let dataDirectory {
+            checks += try await debugThemeProbe(output: dataDirectory)
+        }
+        if ProcessInfo.processInfo.environment["JOTBLOOM_THEME_MOTION_SMOKE"] == "1", let dataDirectory {
+            let previousAppearance = panelState.preferences.appearance
+            automaticDismissalEnabled = false
+            for appearance in PanelAppearance.allCases {
+                panelState.preferences.appearance = appearance
+                let folder = dataDirectory.appendingPathComponent(appearance.rawValue)
+                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                checks += try await debugUI13Probe(output: folder).map { (appearance.rawValue + "_" + $0.0, $0.1) }
+            }
+            panelState.preferences.appearance = previousAppearance
+            automaticDismissalEnabled = true
+            print("THEME_MOTION_OUTPUT", dataDirectory.path)
+        }
+        checks.append(("review_automatic_dismissal_enabled", automaticDismissalEnabled))
+        checks.append(("review_shadow_noninteractive", panel.childWindows?.count == 1 && panel.childWindows?.first?.ignoresMouseEvents == true && panel.childWindows?.first?.isKeyWindow == false))
+        if ProcessInfo.processInfo.environment["JOTBLOOM_EDGE_PROBE"] == "1", let dataDirectory {
+            if let frameView = panel.contentView?.superview {
+                if let bitmap = frameView.bitmapImageRepForCachingDisplay(in: frameView.bounds) {
+                    frameView.cacheDisplay(in: frameView.bounds, to: bitmap)
+                    try bitmap.representation(using: .png, properties: [:])?.write(to: dataDirectory.appendingPathComponent("window-frame.png"))
+                }
+            }
+            print("EDGE_OUTPUT", dataDirectory.path)
+            checks += try await debugPolishLayoutProbe(output: dataDirectory)
+        }
+        if let dataDirectory {
+            openSettings(); panelState.settingsSection = "about"; try await settle()
+            try debugCapturePromptPanel(to: dataDirectory.appendingPathComponent("ui12-about.png"))
+            closeSettings(); try await settle()
+        }
+        _ = debugPerformKeyEquivalent(keyCode: UInt16(kVK_Escape)); try await settle()
+        checks.append(("review_escape_hides", !panel.isVisible))
+        checks.append(("review_shadow_hides_with_panel", panel.childWindows?.allSatisfy { !$0.isVisible } == true))
+        show(); try await settle()
+        checks.append(("review_reopens", panel.isVisible))
+        checks.append(("review_shadow_reattaches_on_reopen", panel.childWindows?.first?.isVisible == true && panel.childWindows?.first?.frame == panel.frame.insetBy(dx: -18, dy: -18)))
+        toggle(); try await settle()
+        checks.append(("review_toggle_hides", !panel.isVisible))
+        show(); try await settle()
+        let other = NSWindow(contentRect: .init(x: 100, y: 100, width: 100, height: 80), styleMask: [.titled], backing: .buffered, defer: false)
+        other.isReleasedWhenClosed = false
+        other.makeKeyAndOrderFront(nil); try await settle()
+        checks.append(("review_external_focus_hides", !panel.isVisible))
+        other.close()
+        show(); try await settle()
+        let url = URL(string: "https://fengli-ai.github.io/JotBloom-Notch-Assistant/")!
+        let declined = BloomExternalLinks.action(using: .init { _ in .discarded }, onOpened: { self.onRequestHide?() })
+        declined(url); try await settle()
+        checks.append(("review_declined_url_keeps_panel", panel.isVisible))
+        let accepted = BloomExternalLinks.action(using: .init { _ in .handled }, onOpened: { self.onRequestHide?() })
+        accepted(url); try await settle()
+        checks.append(("review_accepted_url_hides_panel", !panel.isVisible && !panelState.isPresented))
+        return checks
+    }
     var debugSettingsOpen: Bool { panelState.isSettingsOpen }
     func debugRunPlaceholderProbe(output: URL) async throws -> [(String, Bool)] {
         guard ProcessInfo.processInfo.environment["JOTBLOOM_PLACEHOLDER_SMOKE"] == "1" else { return [] }
@@ -822,6 +1249,31 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
     }
 #endif
 
+    private func changeAppearance(_ appearance: PanelAppearance, controlRect: NSRect) {
+        guard appearance != panelState.preferences.appearance else { return }
+        appearanceReveal?.removeFromSuperview(); appearanceReveal = nil
+        guard !panelState.reducesMotion, panel.isVisible, let content = panel.contentView,
+              let bitmap = content.bitmapImageRepForCachingDisplay(in: content.bounds) else {
+            panelState.preferences.appearance = appearance; return
+        }
+        content.cacheDisplay(in: content.bounds, to: bitmap)
+        let image = NSImage(size: content.bounds.size); image.addRepresentation(bitmap)
+        let rect = content.convert(controlRect, from: nil)
+        let origin = NSPoint(x: rect.minX + (appearance == .dark ? 39 : 121), y: rect.midY)
+        let reveal = BloomThemeRevealView(frame: content.bounds, image: image, origin: origin, controls: rect)
+        content.addSubview(reveal, positioned: .above, relativeTo: nil)
+        appearanceReveal = reveal
+        panelState.preferences.appearance = appearance
+        DispatchQueue.main.async { [weak self, weak reveal] in
+            guard let self, let reveal, self.appearanceReveal === reveal else { return }
+            content.layoutSubtreeIfNeeded(); content.displayIfNeeded()
+            reveal.start { [weak self, weak reveal] in
+                reveal?.removeFromSuperview()
+                if self?.appearanceReveal === reveal { self?.appearanceReveal = nil }
+            }
+        }
+    }
+
     var isPanelKeyWindow: Bool {
         panel.isKeyWindow
     }
@@ -850,7 +1302,11 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         let finalFrame = PanelGeometry.panelFrame(for: metrics, expanded: panelState.isExpanded)
         panel.alphaValue = panelState.reducesMotion ? 1 : 0
         panel.setFrame(panelState.reducesMotion ? finalFrame : finalFrame.offsetBy(dx: 0, dy: 8), display: true)
+        panel.appearance = NSAppearance(named: panelState.preferences.appearance == .dark ? .darkAqua : .aqua)
+        panel.contentView?.layoutSubtreeIfNeeded()
+        panel.contentView?.displayIfNeeded()
         panel.orderFrontRegardless()
+        panelState.setPresented(true)
         panel.makeKey()
         completeTabSelection(panelState.selectedTab)
         if !panelState.reducesMotion {
@@ -882,11 +1338,13 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         restoringSystemFocus = false
         frameAnimationTimer?.invalidate()
         frameAnimationTimer = nil
+        appearanceReveal?.removeFromSuperview(); appearanceReveal = nil
         animateDismissalVisual()
         detailTransitionInProgress = false
         inspirationLibraryViewModel.resetForPanelDismissal()
         globalSearchViewModel.resetForPanelDismissal()
         panel.orderOut(nil)
+        panelState.setPresented(false)
         expansionChangesAnimated = false
         panelState.resetForPresentation()
         expansionChangesAnimated = true
@@ -894,6 +1352,7 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
     }
 
     func close() {
+        panelState.setPresented(false)
         settingsModel?.recordingShortcut = false
         setShortcutRecording(false)
         focusEventGeneration &+= 1
@@ -994,7 +1453,8 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         panel.hidesOnDeactivate = false
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        panel.hasShadow = true
+        panel.hasShadow = false
+        // The system shadow adds a uniform bright rim. Draw our edge and shadow separately.
         panel.isMovable = false
         panel.isMovableByWindowBackground = false
         panel.isReleasedWhenClosed = false
@@ -1005,7 +1465,7 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         panel.acceptsMouseMovedEvents = true
         panel.onKeyboardInteraction = { [weak self] in self?.panelState.useKeyboardNavigation() }
         panel.onPointerInteraction = { [weak self] in self?.panelState.usePointerNavigation() }
-        panel.appearance = NSAppearance(named: .darkAqua)
+        panel.appearance = NSAppearance(named: panelState.preferences.appearance == .dark ? .darkAqua : .aqua)
         panel.onEscape = { [weak self] in
             guard let self else { return }
             if promptModel?.editingID != nil { promptModel?.cancelEdit(); return }
@@ -1146,6 +1606,7 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
                 onSettings: { [weak self] in self?.toggleSettings() },
                 onCloseSettings: { [weak self] in self?.closeSettings() },
                 dataDirectory: dataDirectory,
+                onExternalLinkOpened: { [weak self] in self?.onRequestHide?() },
                 settingsModel: settingsModel,
                 promptModel: promptModel,
                 chatModel: chatModel,
@@ -1269,6 +1730,7 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
             case .prompts:
                 promptModel?.activate()
             case .chat:
+                panelState.expand()
                 chatModel?.focus()
             case .inspirationLibrary:
                 activateInspirationLibraryForCurrentRoute()
@@ -1544,6 +2006,7 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         let ghost = NSWindow(contentRect: panel.frame, styleMask: .borderless, backing: .buffered, defer: false)
         ghost.isReleasedWhenClosed = false
         ghost.isOpaque = false
+        ghost.hasShadow = false
         ghost.backgroundColor = .clear
         ghost.ignoresMouseEvents = true
         ghost.level = panel.level
@@ -1568,6 +2031,39 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
 }
 
 private final class JotBloomPanel: NSPanel {
+    private var softShadowWindow: NSWindow?
+    override var alphaValue: CGFloat { didSet { softShadowWindow?.alphaValue = alphaValue } }
+    override func setFrame(_ frameRect: NSRect, display flag: Bool) {
+        super.setFrame(frameRect, display: flag)
+        softShadowWindow?.setFrame(frame.insetBy(dx: -18, dy: -18), display: flag)
+    }
+    override func orderFrontRegardless() {
+        super.orderFrontRegardless()
+        if softShadowWindow == nil {
+            let shadow = PanelShadowWindow(contentRect: frame.insetBy(dx: -18, dy: -18), styleMask: .borderless, backing: .buffered, defer: false)
+            shadow.isReleasedWhenClosed = false
+            shadow.animationBehavior = .none
+            shadow.isOpaque = false; shadow.backgroundColor = .clear; shadow.hasShadow = false
+            shadow.ignoresMouseEvents = true; shadow.isExcludedFromWindowsMenu = true
+            shadow.level = level; shadow.collectionBehavior = collectionBehavior
+            shadow.contentView = PanelDropShadowView(frame: .zero)
+            softShadowWindow = shadow
+        }
+        // AppKit can detach an ordered-out child; restore the relationship on every show.
+        if let shadow = softShadowWindow, shadow.parent !== self { addChildWindow(shadow, ordered: .below) }
+        softShadowWindow?.setFrame(frame.insetBy(dx: -18, dy: -18), display: true)
+        softShadowWindow?.alphaValue = alphaValue
+        softShadowWindow?.order(.below, relativeTo: windowNumber)
+    }
+    override func orderOut(_ sender: Any?) {
+        softShadowWindow?.orderOut(nil)
+        super.orderOut(sender)
+    }
+    override func close() {
+        if let shadow = softShadowWindow { removeChildWindow(shadow); shadow.close(); softShadowWindow = nil }
+        super.close()
+    }
+
     var onSettingsKey: ((NSEvent) -> Bool)?
     var onKeyboardInteraction: (() -> Void)?
     var onPointerInteraction: (() -> Void)?
@@ -1800,11 +2296,20 @@ private final class JotBloomPanel: NSPanel {
 
 private final class PanelMaterialView: NSView {
     private let outlineMask = CAShapeLayer()
+    private let edgeView = PanelEdgeView(frame: .zero)
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsLayout = true
+        edgeView.needsDisplay = true
+    }
 
     override func layout() {
         super.layout()
         wantsLayer = true
-        layer?.backgroundColor = NSColor(srgbRed: 5/255, green: 6/255, blue: 8/255, alpha: 1).cgColor
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = NSColor(BloomTheme.surface).cgColor
+        }
         // Explicit geometry also survives AppKit's cached rendering used for dismissal.
         // A cornerRadius + maskedCorners layer was rounded on all corners in that path.
         let radius: CGFloat = 20
@@ -1824,5 +2329,127 @@ private final class PanelMaterialView: NSView {
         layer?.mask = outlineMask
         CATransaction.commit()
         layer?.masksToBounds = true
+        if edgeView.superview == nil { addSubview(edgeView) }
+        edgeView.frame = bounds
+        edgeView.needsDisplay = true
     }
+}
+
+/// A square top and rounded bottom, shared by the visible rim and the soft shadow.
+private enum PanelOutline {
+    static func path(in rect: NSRect, radius: CGFloat = 20) -> CGPath {
+        let path = CGMutablePath()
+        path.move(to: .init(x: rect.minX, y: rect.maxY))
+        path.addLine(to: .init(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: .init(x: rect.maxX, y: rect.minY + radius))
+        path.addQuadCurve(to: .init(x: rect.maxX - radius, y: rect.minY), control: .init(x: rect.maxX, y: rect.minY))
+        path.addLine(to: .init(x: rect.minX + radius, y: rect.minY))
+        path.addQuadCurve(to: .init(x: rect.minX, y: rect.minY + radius), control: .init(x: rect.minX, y: rect.minY))
+        path.closeSubpath()
+        return path
+    }
+}
+
+private final class PanelEdgeView: NSView {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    override func draw(_ dirtyRect: NSRect) {
+        guard let context = NSGraphicsContext.current?.cgContext else { return }
+        context.saveGState()
+        context.addPath(PanelOutline.path(in: bounds.insetBy(dx: 0.5, dy: 0.5), radius: 19.5))
+        context.setLineWidth(1)
+        context.replacePathWithStrokedPath(); context.clip()
+        // Bottom and bottom corners retain their rim; the upper edge is fully clear.
+        let rim = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor.white.withAlphaComponent(0.20) : NSColor.black.withAlphaComponent(0.12)
+        NSGradient(colorsAndLocations: (rim, 0), (rim, 0.10),
+                   (rim.withAlphaComponent(0), 0.96), (rim.withAlphaComponent(0), 1))?.draw(in: bounds, angle: 90)
+        context.restoreGState()
+    }
+}
+
+private final class PanelDropShadowView: NSView {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    override func draw(_ dirtyRect: NSRect) {
+        guard let context = NSGraphicsContext.current?.cgContext else { return }
+        context.saveGState()
+        // Keep the panel interior transparent: its fade-in must not reveal a black plate.
+        context.addRect(bounds)
+        context.addPath(PanelOutline.path(in: bounds.insetBy(dx: 18, dy: 18)))
+        context.clip(using: .evenOdd)
+        let shadow = NSShadow()
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.30)
+        shadow.shadowBlurRadius = 10
+        shadow.shadowOffset = .init(width: 0, height: -4)
+        shadow.set()
+        context.addPath(PanelOutline.path(in: bounds.insetBy(dx: 18, dy: 18)))
+        context.setFillColor(NSColor.black.cgColor); context.fillPath()
+        context.restoreGState()
+    }
+}
+
+/// Shadow padding intentionally extends past the screen edge with its parent panel.
+private final class PanelShadowWindow: NSWindow {
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
+}
+
+/// Previous circular reveal, with a rounded selector opening and slightly longer duration.
+private final class BloomThemeRevealView: NSView {
+    private let oldImage = NSImageView()
+    private let circleMask = CAShapeLayer()
+    private let controlMask = CAShapeLayer()
+    private let origin: NSPoint
+    private let controls: NSRect
+    private var cleanup: DispatchWorkItem?
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    init(frame: NSRect, image: NSImage, origin: NSPoint, controls: NSRect) {
+        self.origin = origin; self.controls = controls
+        super.init(frame: frame)
+        wantsLayer = true
+        oldImage.frame = bounds; oldImage.image = image; oldImage.imageScaling = .scaleAxesIndependently
+        oldImage.wantsLayer = true; addSubview(oldImage)
+        setAccessibilityHidden(true); oldImage.setAccessibilityHidden(true)
+        circleMask.frame = bounds
+        circleMask.fillRule = .evenOdd; circleMask.path = path(radius: 0.1)
+        oldImage.layer?.mask = circleMask
+        // Match the control's continuous corner contour instead of exposing a rectangle.
+        controlMask.frame = bounds; controlMask.fillRule = .evenOdd
+        let holes = CGMutablePath(); holes.addRect(bounds)
+        holes.addPath(RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .path(in: controls.insetBy(dx: -4, dy: -4)).cgPath)
+        controlMask.path = holes; layer?.mask = controlMask
+    }
+    required init?(coder: NSCoder) { nil }
+    private func path(radius: CGFloat) -> CGPath {
+        let path = CGMutablePath(); path.addRect(bounds)
+        path.addEllipse(in: NSRect(x: origin.x - radius, y: origin.y - radius, width: radius * 2, height: radius * 2))
+        return path
+    }
+#if DEBUG
+    var debugRadius: CGFloat {
+        let current = circleMask.presentation()?.path ?? circleMask.path!
+        var curves = [CGPoint]()
+        current.applyWithBlock { element in
+            if element.pointee.type == .addCurveToPoint { curves.append(element.pointee.points[2]) }
+        }
+        return curves.map { hypot($0.x - origin.x, $0.y - origin.y) }.max() ?? 0
+    }
+    var debugRoundedControlOpening: Bool {
+        let corner = NSPoint(x: controls.minX - 3, y: controls.minY - 3)
+        return controlMask.path?.contains(corner, using: .evenOdd) == true
+            && controlMask.path?.contains(NSPoint(x: controls.midX, y: controls.midY), using: .evenOdd) == false
+    }
+#endif
+    func start(completion: @escaping () -> Void) {
+        let radius = [NSPoint(x: 0, y: 0), .init(x: bounds.width, y: 0), .init(x: 0, y: bounds.height), .init(x: bounds.width, y: bounds.height)]
+            .map { hypot($0.x - origin.x, $0.y - origin.y) }.max()! + 2
+        let animation = CABasicAnimation(keyPath: "path")
+        animation.fromValue = path(radius: 0.1); animation.toValue = path(radius: radius)
+        let duration = 1.50
+        animation.duration = duration
+        animation.timingFunction = CAMediaTimingFunction(controlPoints: 0.16, 1, 0.30, 1)
+        circleMask.path = path(radius: radius); circleMask.add(animation, forKey: "reveal")
+        let work = DispatchWorkItem(block: completion); cleanup = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration + 0.02, execute: work)
+    }
+    deinit { cleanup?.cancel() }
 }

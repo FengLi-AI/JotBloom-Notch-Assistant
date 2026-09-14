@@ -146,6 +146,9 @@ enum StageTenOperationsSmokeRunner {
                     sourceApplication: .init(name: "Finder", bundleIdentifier: "com.apple.finder")))
                 clipboard.refreshAfterMaintenance()
                 checks += try await panel.debugRunTenCVisualProbe(output: root)
+                checks += try await panel.debugPolishLayoutProbe(output: root)
+                checks += try await panel.debugUI12Probe(output: root)
+                checks += try await panel.debugUI13Probe(output: root)
             }
             checks.append(("general_pasteboard_untouched", NSPasteboard.general.changeCount == before))
             try await input.prepareForTermination(); _ = await library.prepareForTermination()

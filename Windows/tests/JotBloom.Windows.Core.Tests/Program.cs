@@ -134,5 +134,20 @@ Check("restore shortcut save failure re-registers original combination", () => {
     try {ShortcutSettings.Apply(old,Hotkey.Default,key=>{registrations.Add(key);return true;},_=>throw new IOException("fixture"));}catch(IOException){failed=true;}
     Require(failed&&registrations.SequenceEqual(new[]{Hotkey.Default,old.Shortcut}));
 });
+Check("temporary expansion returns to ordinary tab size",()=>{
+    var nav=new PanelNavigation();Require(!nav.Expanded);
+    nav.Select("chat");Require(nav.Expanded);nav.Select("search");Require(nav.Expanded);nav.Select("clipboard");Require(!nav.Expanded);
+    nav.Resize(true);nav.Select("chat");nav.Select("prompts");Require(nav.Expanded);
+    nav.Select("settings");nav.Select("input");Require(nav.Expanded);nav.Resize(false);nav.Select("settings");nav.Select("input");Require(!nav.Expanded);
+    nav.Select("chat");nav.Resize(false);Require(!nav.Expanded);nav.Select("search");Require(nav.Expanded);nav.Select("input");Require(!nav.Expanded);
+});
+Check("appearance persists and only exact shipped prompt migrates",()=>{
+    string dir=Path.Combine(Path.GetTempPath(),"jotbloom-theme-"+Guid.NewGuid());
+    try{var file=new SettingsFile(Path.Combine(dir,"settings.json"));Require(file.Load().Appearance=="dark");
+        file.Save(new ProductSettings{Appearance="light",SystemPrompt=AiPrompts.PreviousChat});var updated=file.Load();Require(updated.Appearance=="light"&&updated.SystemPrompt==AiPrompts.Chat);
+        file.Save(updated with{SystemPrompt=AiPrompts.PreviousChat+" 自定义"});Require(file.Load().SystemPrompt.EndsWith(" 自定义"));
+        file.Save(updated with{Appearance="dark"});Require(file.Load().Appearance=="dark");
+    }finally{if(Directory.Exists(dir))Directory.Delete(dir,true);}
+});
 passed+=await AiContracts.Run();
 Console.WriteLine($"Passed {passed} contract checks; Windows UI not exercised.");
