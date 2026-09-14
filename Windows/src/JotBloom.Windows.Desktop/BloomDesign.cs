@@ -22,7 +22,7 @@ internal static class BloomTheme
     internal static readonly SolidColorBrush Shell=new(),Surface=new(),Well=new(),Raised=new(),Text=new(),Muted=new(),Blue=new(),Stroke=new(),Selected=new(),Bubble=new(),Track=new(),Thumb=new(),Primary=new();
     internal static readonly LinearGradientBrush Rim=new(Colors.Transparent,ColorOf("#28FFFFFF"),90);
     internal static readonly FontFamily LabelFont=new(new Uri("pack://application:,,,/"),"./Assets/Fonts/#MiSans");
-    internal static readonly FontFamily BodyFont=LabelFont;
+    internal static readonly FontFamily BodyFont=new(new Uri("pack://application:,,,/"),"./Assets/Fonts/#MiSans Normal");
     static BloomTheme(){Apply("dark");}
     internal static void Apply(string appearance)
     {

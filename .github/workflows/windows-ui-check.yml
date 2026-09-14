@@ -18,18 +18,20 @@ jobs:
         with:
           global-json-file: Windows/global.json
       - name: Core and storage contracts
+        working-directory: Windows
         shell: pwsh
         run: |
-          dotnet run --project Windows/tests/JotBloom.Windows.Core.Tests
+          dotnet run --project tests/JotBloom.Windows.Core.Tests
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          dotnet run --project Windows/tests/JotBloom.Windows.Storage.Tests
+          dotnet run --project tests/JotBloom.Windows.Storage.Tests
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python Windows/scripts/check-schema.py
+          python scripts/check-schema.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build self-contained Windows client
+        working-directory: Windows
         shell: pwsh
         run: |
-          dotnet publish Windows/src/JotBloom.Windows.Desktop -c Release -r win-x64 --self-contained true -p:DebugType=None -p:DebugSymbols=false -o "$env:RUNNER_TEMP/publish"
+          dotnet publish src/JotBloom.Windows.Desktop -c Release -r win-x64 --self-contained true -p:DebugType=None -p:DebugSymbols=false -o "$env:RUNNER_TEMP/publish"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Render real WPF pages and exercise themes
         shell: pwsh

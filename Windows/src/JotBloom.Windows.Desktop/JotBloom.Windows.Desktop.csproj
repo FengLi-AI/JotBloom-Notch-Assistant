@@ -20,7 +20,6 @@
     <ImplicitUsings>disable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.12" />
     <ProjectReference Include="../JotBloom.Windows.Core/JotBloom.Windows.Core.csproj" />
     <ProjectReference Include="../JotBloom.Windows.Storage/JotBloom.Windows.Storage.csproj" />
   </ItemGroup>
