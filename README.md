@@ -46,7 +46,7 @@
 
 Mac 打开 DMG 后，将 **萌生｜JotBloom.app** 拖入“应用程序”；Windows 双击 EXE 完成安装。首次启动会请你选择数据保存位置。更新前保存内容并退出旧版，保留重要数据备份。
 
-Mac 安装包使用 ad-hoc 签名，尚未经过 Apple 公证；Windows 安装包尚未签名，系统可能提示核实来源。请从项目官网或 Releases 下载，按系统指引安装。Mac 最低系统及 Intel 设备仍需更多兼容性反馈；Windows 已收到用户安装与使用正常的反馈。
+Mac 安装包使用 ad-hoc 签名，尚未经过 Apple 公证；Windows 安装包尚未签名，系统可能提示核实来源。请从项目官网或 Releases 下载，按系统指引安装。Mac 最低系统及 Intel 设备仍需更多兼容性反馈；Windows 旧版已有用户安装反馈，1.0.4 测试版仍需 Windows 实机确认。
 
 
 ## 本地数据与 AI
