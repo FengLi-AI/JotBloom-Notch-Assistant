@@ -87,3 +87,14 @@ dialog{color:var(--ink);border:1px solid #b6d3fc40;background:#182953;border-rad
 @media(min-width:1500px){.hero-bottom{grid-template-columns:minmax(0,1fr) 390px}}
 @media(min-width:601px) and (max-width:1050px){.hero-bottom{grid-template-columns:minmax(0,1fr) 310px;gap:24px}.opening h1{font-size:clamp(40px,6.5vw,66px)}.download-pair .pill{font-size:12px;padding-inline:8px;gap:7px}}
 @media(max-width:600px){.hero-bottom{grid-template-columns:1fr;gap:28px}.hero-aside{display:block}.hero-aside>p:first-child{margin-bottom:14px}.hero-aside .free-note{margin-bottom:12px}.hero-aside .download-pair .pill{padding:15px 10px;gap:8px;font-size:12px}.hero-aside small{margin-top:12px}.download-pair{max-width:100%}}
+
+/* Product screenshots have their own appearance setting; the website keeps its light-field identity. */
+.preview-theme{display:flex;gap:4px;flex-shrink:0;background:#07112550;padding:4px;border:1px solid #ffffff18;border-radius:16px}
+.preview-theme button{min-width:54px;min-height:30px;padding:5px 12px;border-radius:12px;background:transparent;color:#bbcee9;font:inherit;font-size:12px;letter-spacing:0;transition:background .3s,color .3s,box-shadow .3s}
+.preview-theme button[aria-pressed="true"]{color:#fff;background:linear-gradient(120deg,#4b6df2,#188edb);box-shadow:inset 0 1px #ffffff29}
+.preview-theme button:focus-visible{outline:2px solid #a2ceff;outline-offset:3px}
+.stage-bar{align-items:center;gap:12px;padding-bottom:14px}.stage-bar>span{display:flex;gap:12px;flex-wrap:wrap}
+.screenshot-button{background:#14171d;transition:background .36s}.screenshot-button[data-theme="light"]{background:#f6f7f9}
+.screenshot-button img{height:clamp(230px,44vw,520px);max-height:none;object-fit:contain}
+@media(max-width:600px){.stage{padding:12px 10px 16px}.stage-bar{font-size:9px}.stage-bar>span{gap:4px;flex-direction:column}.preview-theme button{min-width:46px;padding:5px 8px}.stage-caption{gap:12px;line-height:1.6}.product-tabs{gap:4px}.product-tabs button{padding:9px 12px}}
+@media(prefers-reduced-motion:reduce){.preview-theme button,.screenshot-button{transition:none}}

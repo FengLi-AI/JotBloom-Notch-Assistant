@@ -11,9 +11,27 @@
   function wake(){if(!toyFrame&&!reduced.matches)toyFrame=requestAnimationFrame(settle);}
   toy.addEventListener('pointermove',e=>{if(e.pointerType==='touch'||reduced.matches)return;const r=toy.getBoundingClientRect();tx=Math.max(-1,Math.min(1,(e.clientX-r.left)/r.width*2-1));ty=Math.max(-1,Math.min(1,(e.clientY-r.top)/r.height*2-1));wake();});toy.addEventListener('pointerleave',()=>{tx=ty=0;wake();});
   reduced.addEventListener('change',()=>{if(reduced.matches){cancelAnimationFrame(toyFrame);toyFrame=0;tilt.style.transform='';tx=ty=x=y=vx=vy=0;}queueLight();});
-  const features={capture:{title:'想法来了，先留住它。',description:'随手记录，在灵感库回看。配置 AI 后，自动生成简短标题并辅助分类。',image:'assets/inspiration.png',label:'灵感记录'},clipboard:{title:'刚复制过的，还在这里。',description:'回看文字与图片，左键复制收起，右键复制保留。文字可另存为灵感或提示词。',image:'assets/clipboard.png',label:'剪贴板历史'},prompts:{title:'好用的提示词，值得再用一次。',description:'收藏、编辑、另存，拖动排好顺序。下次需要时，直接复制常用提示词。',image:'assets/prompts.png',label:'提示词库'},chat:{title:'从一个念头，聊到下一步。',description:'用自己的模型讨论想法，历史对话接着聊。有价值的内容可整理成灵感。',image:'assets/site-chat.png',label:'AI 对话 · 固定演示回复'}};
+  const features={capture:{title:'想法来了，先留住它。',description:'随手记录，在灵感库回看。配置 AI 后，自动生成简短标题并辅助分类。',image:'inspiration',label:'灵感记录'},clipboard:{title:'刚复制过的，还在这里。',description:'回看文字与图片，左键复制收起，右键复制保留。文字可另存为灵感或提示词。',image:'clipboard',label:'剪贴板历史'},prompts:{title:'好用的提示词，值得再用一次。',description:'收藏、编辑、另存，拖动排好顺序。下次需要时，直接复制常用提示词。',image:'prompts',label:'提示词库'},chat:{title:'从一个念头，聊到下一步。',description:'用自己的模型讨论想法，历史对话接着聊。有价值的内容可整理成灵感。',image:'chat',label:'AI 对话 · 固定演示回复'},library:{title:'散落的灵感，慢慢连起来。',description:'按文章、作品、产品与 idea 分类回看，继续编辑，让想法逐渐清晰。',image:'library',label:'灵感库'},search:{title:'记得一点，就能再找到。',description:'一起搜索灵感、剪贴板和提示词，按分类缩小范围，回到需要的内容。',image:'search',label:'统一搜索'}};
   const tabs=[...document.querySelectorAll('[data-feature]')],img=document.querySelector('#feature-image');
-  function select(tab){const f=features[tab.dataset.feature];tabs.forEach(t=>{t.setAttribute('aria-selected',String(t===tab));t.tabIndex=t===tab?0:-1;});document.querySelector('#feature-panel').setAttribute('aria-labelledby',tab.id);document.querySelector('#feature-heading').textContent=f.title;document.querySelector('#feature-description').textContent=f.description;document.querySelector('#feature-label').textContent=f.label;img.src=f.image;img.alt='萌生'+f.label+'原生界面截图';optical(document.querySelector('#feature-heading'));}
+  let previewTheme='dark',selectedFeature='capture',pictureRevision=0;
+  try{const saved=localStorage.getItem('jotbloom-preview-theme');if(saved==='light')previewTheme=saved;}catch{}
+  const themeButtons=[...document.querySelectorAll('[data-preview-theme]')];
+  async function renderPicture(){
+    const ticket=++pictureRevision,f=features[selectedFeature],theme=previewTheme;
+    const src=`assets/1.0.4/${theme}-${f.image}.png`,next=new Image();next.src=src;
+    themeButtons.forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.previewTheme===theme)));
+    try{await next.decode();}catch{if(ticket===pictureRevision)document.querySelector('#feature-label').textContent='截图加载未完成，请重试';return;}
+    if(ticket!==pictureRevision)return;
+    img.src=src;img.alt=`萌生 Mac 1.0.4 ${theme==='light'?'浅色':'深色'} · ${f.label}原生界面截图`;
+    document.querySelector('.screenshot-button').dataset.theme=theme;
+    document.querySelector('#feature-label').textContent=f.label;
+    if(!reduced.matches)img.animate([{opacity:.3},{opacity:1}],{duration:360,easing:'cubic-bezier(.22,1,.36,1)'});
+  }
+  themeButtons.forEach((button,index)=>{
+    button.addEventListener('click',()=>{previewTheme=button.dataset.previewTheme;try{localStorage.setItem('jotbloom-preview-theme',previewTheme);}catch{}renderPicture();});
+    button.addEventListener('keydown',e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();const next=themeButtons[1-index];next.focus();next.click();}});
+  });
+  function select(tab){const f=features[tab.dataset.feature];tabs.forEach(t=>{t.setAttribute('aria-selected',String(t===tab));t.tabIndex=t===tab?0:-1;});document.querySelector('#feature-panel').setAttribute('aria-labelledby',tab.id);document.querySelector('#feature-heading').textContent=f.title;document.querySelector('#feature-description').textContent=f.description;document.querySelector('#feature-label').textContent=f.label;selectedFeature=tab.dataset.feature;renderPicture();optical(document.querySelector('#feature-heading'));}
   tabs.forEach((tab,i)=>{tab.addEventListener('click',()=>select(tab));tab.addEventListener('keydown',e=>{let next;if(e.key==='ArrowRight')next=(i+1)%tabs.length;if(e.key==='ArrowLeft')next=(i+tabs.length-1)%tabs.length;if(e.key==='Home')next=0;if(e.key==='End')next=tabs.length-1;if(next!==undefined){e.preventDefault();select(tabs[next]);tabs[next].focus();}});});
   const imageDialog=document.querySelector('.image-dialog'),message=document.querySelector('.message-dialog');
   function zoom(){imageDialog.querySelector('img').src=img.src;imageDialog.querySelector('img').alt=img.alt;imageDialog.showModal();}document.querySelector('#zoom').addEventListener('click',zoom);document.querySelector('.screenshot-button').addEventListener('click',zoom);
