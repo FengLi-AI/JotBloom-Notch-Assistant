@@ -25,7 +25,7 @@ VIAddVersionKey "LegalCopyright" "Copyright 2026 Li Fengli"
 !define MUI_FINISHPAGE_RUN "$INSTDIR\JotBloom.exe"
 !define MUI_FINISHPAGE_RUN_TEXT "启动萌生"
 !insertmacro MUI_PAGE_WELCOME
-!insertmacro MUI_PAGE_LICENSE "${PUBLISH_DIR}/LICENSE.txt"
+!insertmacro MUI_PAGE_LICENSE "${LICENSE_FILE}"
 !insertmacro MUI_PAGE_COMPONENTS
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
@@ -78,7 +78,7 @@ Section "萌生客户端（必选）" Main
   SectionIn RO
   Call CheckRunning
   SetOutPath "$INSTDIR"
-  File /r /x "._*" "${PUBLISH_DIR}/*"
+  File /r /x "._*" "${PAYLOAD_GLOB}"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   WriteRegStr HKCU "Software\JotBloom" "InstallLocation" "$INSTDIR"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\JotBloom" "DisplayName" "萌生 · JotBloom"
