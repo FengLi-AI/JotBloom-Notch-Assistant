@@ -51,7 +51,7 @@ jobs:
           python Windows/scripts/package.py "$env:RUNNER_TEMP/publish" "$pwd/windows-package"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $installer = Get-ChildItem windows-package/*Setup.exe | Select-Object -First 1
-          $install = "$env:RUNNER_TEMP/JotBloom-installed"
+          $install = Join-Path $env:RUNNER_TEMP 'JotBloom-installed'
           $process = Start-Process $installer.FullName -ArgumentList @('/S', "/D=$install") -Wait -PassThru
           if ($process.ExitCode -ne 0) { throw 'Installer failed' }
           $manifest = Get-Content "$install/payload-sha256.json" -Raw | ConvertFrom-Json -AsHashtable
@@ -66,6 +66,7 @@ jobs:
           if ($uninstall.ExitCode -ne 0) { throw 'Uninstall failed' }
           "Verified $($manifest.Count) installed file hashes and installed app UI." | Set-Content windows-package/verification.txt
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: windows-installer
           path: windows-package/
