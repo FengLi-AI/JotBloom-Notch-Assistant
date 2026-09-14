@@ -18,19 +18,33 @@ internal static class BloomTheme
     internal static bool Animate => !ReduceMotion && SystemParameters.ClientAreaAnimation;
     internal static SolidColorBrush Brush(string hex) { var b=new SolidColorBrush(ColorOf(hex));b.Freeze();return b; }
     internal static Color ColorOf(string hex)=>(Color)ColorConverter.ConvertFromString(hex);
-    // Shared mutable brushes update existing editors without rebuilding pages or losing drafts.
-    internal static readonly SolidColorBrush Shell=new(),Surface=new(),Well=new(),Raised=new(),Text=new(),Muted=new(),Blue=new(),Stroke=new(),Selected=new(),Bubble=new(),Track=new(),Thumb=new(),Primary=new();
+    private sealed class ThemeColor:System.ComponentModel.INotifyPropertyChanged
+    {
+        private Color value;
+        public Color Value {get=>value;set{this.value=value;PropertyChanged?.Invoke(this,new System.ComponentModel.PropertyChangedEventArgs(nameof(Value)));}}
+        public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+    }
+    private static readonly Dictionary<SolidColorBrush,ThemeColor> colors=[];
+    private static readonly ThemeColor rimColor=new();
+    private static SolidColorBrush Live()
+    {
+        var value=new ThemeColor();var brush=new SolidColorBrush();
+        // Binding expressions keep template-owned Freezables unfrozen.
+        BindingOperations.SetBinding(brush,SolidColorBrush.ColorProperty,new Binding(nameof(ThemeColor.Value)){Source=value,Mode=BindingMode.OneWay});colors.Add(brush,value);return brush;
+    }
+    // Bindings update existing editors without rebuilding pages or losing drafts.
+    internal static readonly SolidColorBrush Shell=Live(),Surface=Live(),Well=Live(),Raised=Live(),Text=Live(),Muted=Live(),Blue=Live(),Stroke=Live(),Selected=Live(),Bubble=Live(),Track=Live(),Thumb=Live(),Primary=Live();
     internal static readonly LinearGradientBrush Rim=new(Colors.Transparent,ColorOf("#28FFFFFF"),90);
     internal static readonly FontFamily LabelFont=new(new Uri("pack://application:,,,/"),"./Assets/Fonts/#MiSans");
     internal static readonly FontFamily BodyFont=new(new Uri("pack://application:,,,/"),"./Assets/Fonts/#MiSans Normal");
-    static BloomTheme(){Apply("dark");}
+    static BloomTheme(){BindingOperations.SetBinding(Rim.GradientStops[1],GradientStop.ColorProperty,new Binding(nameof(ThemeColor.Value)){Source=rimColor,Mode=BindingMode.OneWay});Apply("dark");}
     internal static void Apply(string appearance)
     {
-        Light=appearance=="light";Rim.GradientStops[1].Color=ColorOf(Light?"#24000000":"#28FFFFFF");
+        Light=appearance=="light";rimColor.Value=ColorOf(Light?"#24000000":"#28FFFFFF");
         var brushes=new[]{Shell,Surface,Well,Raised,Text,Muted,Blue,Stroke,Selected,Bubble,Track,Thumb,Primary};
         var dark=new[]{"#080A0E","#14171D","#191D25","#272D37","#EDF0F6","#AEBBCF","#3B7DFF","#303640","#070A0E","#183D92","#111720","#AEBBCF","#1955E2"};
         var light=new[]{"#EDEFF2","#F6F7F9","#FAFBFC","#FCFDFE","#242A34","#616B7B","#1E5DE0","#DCE1E9","#E4E8EF","#DAE8FF","#D1D7E0","#F7F9FC","#427BF1"};
-        for(int i=0;i<brushes.Length;i++)brushes[i].Color=ColorOf((Light?light:dark)[i]);
+        for(int i=0;i<brushes.Length;i++)colors[brushes[i]].Value=ColorOf((Light?light:dark)[i]);
     }
     internal static void Enter(UIElement view)
     {
@@ -48,6 +62,7 @@ internal sealed class BloomButton:Button
     internal string Accent {get;set;}="";
     internal bool Plain {get;set;}
     internal bool VerticalLabel {get;set;}
+    private static readonly Brush DisabledInk=BloomTheme.Brush("#80FFFFFF");
     private readonly double seed=Random.Shared.NextDouble()*100;
     private static readonly List<WeakReference<BloomButton>> buttons=[];
     private static readonly DispatcherTimer timer=new(TimeSpan.FromMilliseconds(40),DispatcherPriority.Render,(_,_)=>Tick(),Dispatcher.CurrentDispatcher);
@@ -74,13 +89,18 @@ internal sealed class BloomButton:Button
     internal void RefreshLabel()
     {
         if(Content is not string text||Icon is null)return;
+        if(text.Length==0)AutomationProperties.SetName(this,Icon=="settings-2"?"设置":"展开或收回面板");
         var group=new StackPanel{Orientation=VerticalLabel?Orientation.Vertical:Orientation.Horizontal,VerticalAlignment=VerticalAlignment.Center,HorizontalAlignment=HorizontalAlignment.Center};
         var icon=new BloomIcon(Icon){Width=16,Height=16,Margin=VerticalLabel?new Thickness(0,0,0,4):new Thickness(0,0,text.Length==0?0:7,0)};
         icon.SetBinding(BloomIcon.InkProperty,new Binding("Foreground"){Source=this});group.Children.Add(icon);
         if(text.Length>0)group.Children.Add(new TextBlock{Text=text,VerticalAlignment=VerticalAlignment.Center,HorizontalAlignment=HorizontalAlignment.Center});
         Content=group;
     }
-    private void UpdateInk(){Foreground=Accent!=""?(IsEnabled?Brushes.White:BloomTheme.Brush("#80FFFFFF")):(Plain?BloomTheme.Muted:BloomTheme.Text);}
+    private void UpdateInk(){Foreground=Accent!=""?(IsEnabled?Brushes.White:DisabledInk):(Plain?BloomTheme.Muted:BloomTheme.Text);}
+    protected override void OnMouseEnter(MouseEventArgs e){base.OnMouseEnter(e);InvalidateVisual();}
+    protected override void OnMouseLeave(MouseEventArgs e){base.OnMouseLeave(e);InvalidateVisual();}
+    protected override void OnGotKeyboardFocus(KeyboardFocusChangedEventArgs e){base.OnGotKeyboardFocus(e);InvalidateVisual();}
+    protected override void OnLostKeyboardFocus(KeyboardFocusChangedEventArgs e){base.OnLostKeyboardFocus(e);InvalidateVisual();}
     protected override void OnRender(DrawingContext dc)
     {
         UpdateInk();var rect=new Rect(.375,.375,Math.Max(0,ActualWidth-.75),Math.Max(0,ActualHeight-.75));
