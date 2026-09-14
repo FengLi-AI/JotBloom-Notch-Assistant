@@ -116,6 +116,8 @@ internal sealed class PanelWindow : EdgeWindow
     private readonly AppRuntime runtime;
     private readonly System.Collections.Generic.Dictionary<string,BloomPage> pages=[];
     private readonly BloomNavigation nav=new(horizontal:true);
+    private readonly StackPanel header=new(){Orientation=Orientation.Horizontal,Margin=new Thickness(16,12,16,12)};
+    private readonly BloomButton back=new("返回"){Icon="chevron-left"};
     private readonly TextBlock heading=Ui.Text("",18);
     private readonly Grid visualRoot=new();
     private readonly BloomButton expandButton=new(""){Icon="chevron-down",Margin=new Thickness(0)};
@@ -129,13 +131,13 @@ internal sealed class PanelWindow : EdgeWindow
         this.runtime=runtime;Title="萌生 · JotBloom";
         BloomTheme.Apply(runtime.Settings.Appearance);BloomTheme.ReduceMotion=runtime.Settings.ReduceMotion;
         sizing=new(runtime.Settings.DefaultPage);
-        var outer=new Border{Background=BloomTheme.Surface,CornerRadius=new CornerRadius(0,0,24,24),RenderTransform=Translation};
+        var outer=new Border{BorderBrush=BloomTheme.Rim,BorderThickness=new Thickness(.5),Background=BloomTheme.Surface,CornerRadius=new CornerRadius(0,0,24,24),RenderTransform=Translation};
         var grid=new Grid();grid.RowDefinitions.Add(new(){Height=new GridLength(40)});grid.RowDefinitions.Add(new(){Height=GridLength.Auto});grid.RowDefinitions.Add(new(){Height=new GridLength(1,GridUnitType.Star)});
         var top=new Border{Background=BloomTheme.Shell,Child=nav,Padding=new Thickness(8,2,8,2)};grid.Children.Add(top);
-        heading.Margin=new Thickness(16,14,16,12);heading.FontWeight=FontWeights.Normal;heading.FontFamily=BloomTheme.LabelFont;Grid.SetRow(heading,1);grid.Children.Add(heading);
+        heading.Margin=new Thickness(0);heading.VerticalAlignment=VerticalAlignment.Center;heading.FontWeight=FontWeights.Normal;heading.FontFamily=BloomTheme.LabelFont;back.Click+=async(_,_)=>await NavigateSafe(previous=="settings"?"input":previous,null);header.Children.Add(back);header.Children.Add(heading);Grid.SetRow(header,1);grid.Children.Add(header);
         pages["input"]=new InputPane(runtime);pages["clipboard"]=new LibraryPane(runtime,LibraryKind.Clipboard);pages["prompts"]=new LibraryPane(runtime,LibraryKind.Prompts);pages["inspirations"]=new LibraryPane(runtime,LibraryKind.Inspirations);pages["chat"]=new ChatPane(runtime);pages["search"]=new SearchPane(runtime);pages["settings"]=new SettingsPane(runtime);
         current=runtime.Settings.DefaultPage;
-        well=new Border{Background=BloomTheme.Surface,Margin=new Thickness(16,0,16,16),Child=pages[current]};Grid.SetRow(well,2);grid.Children.Add(well);
+        well=new Border{Background=BloomTheme.Surface,Margin=new Thickness(16,12,16,16),Child=pages[current]};Grid.SetRow(well,2);grid.Children.Add(well);
         expandButton.HorizontalAlignment=HorizontalAlignment.Right;expandButton.VerticalAlignment=VerticalAlignment.Bottom;expandButton.Margin=new Thickness(0,0,16,16);expandButton.ToolTip="展开 / 收回 · Ctrl+↓ / Ctrl+↑";
         expandButton.Click+=(_,_)=>SetExpanded(!Expanded);Grid.SetRow(expandButton,2);grid.Children.Add(expandButton);
         outer.Child=grid;visualRoot.Children.Add(outer);Content=visualRoot;
@@ -164,7 +166,7 @@ internal sealed class PanelWindow : EdgeWindow
     {
         string order=string.Join(",",runtime.Settings.TabOrder);
         if(order!=navOrder){navOrder=order;nav.Clear();foreach(string key in runtime.Settings.TabOrder.Concat(new[]{"settings"})){string icon=key switch{"input"=>"bulb","clipboard"=>"clipboard","prompts"=>"bookmark","inspirations"=>"archive","chat"=>"message-circle","search"=>"search",_=>"settings-2"};nav.Add(key,key=="settings"?"":PageNames[key],icon,()=>NavigateSafe(key,null));}}
-        nav.Select(current);heading.Text=current=="chat"?"AI 对话":PageNames.GetValueOrDefault(current,"设置");heading.Visibility=current=="input"?Visibility.Collapsed:Visibility.Visible;
+        nav.Select(current);heading.Text=current=="chat"?"AI 对话":PageNames.GetValueOrDefault(current,"设置");header.Visibility=current=="input"?Visibility.Collapsed:Visibility.Visible;back.Visibility=current=="settings"?Visibility.Visible:Visibility.Collapsed;
         foreach(var page in pages.Values)page.SetExpanded(Expanded);
     }
     private async Task ChangeAppearance(string appearance,FrameworkElement origin)

@@ -20,12 +20,13 @@ internal static class BloomTheme
     internal static Color ColorOf(string hex)=>(Color)ColorConverter.ConvertFromString(hex);
     // Shared mutable brushes update existing editors without rebuilding pages or losing drafts.
     internal static readonly SolidColorBrush Shell=new(),Surface=new(),Well=new(),Raised=new(),Text=new(),Muted=new(),Blue=new(),Stroke=new(),Selected=new(),Bubble=new(),Track=new(),Thumb=new(),Primary=new();
+    internal static readonly LinearGradientBrush Rim=new(Colors.Transparent,ColorOf("#28FFFFFF"),90);
     internal static readonly FontFamily LabelFont=new(new Uri("pack://application:,,,/"),"./Assets/Fonts/#MiSans");
     internal static readonly FontFamily BodyFont=LabelFont;
     static BloomTheme(){Apply("dark");}
     internal static void Apply(string appearance)
     {
-        Light=appearance=="light";
+        Light=appearance=="light";Rim.GradientStops[1].Color=ColorOf(Light?"#24000000":"#28FFFFFF");
         var brushes=new[]{Shell,Surface,Well,Raised,Text,Muted,Blue,Stroke,Selected,Bubble,Track,Thumb,Primary};
         var dark=new[]{"#080A0E","#14171D","#191D25","#272D37","#EDF0F6","#AEBBCF","#3B7DFF","#303640","#070A0E","#183D92","#111720","#AEBBCF","#1955E2"};
         var light=new[]{"#EDEFF2","#F6F7F9","#FAFBFC","#FCFDFE","#242A34","#616B7B","#1E5DE0","#DCE1E9","#E4E8EF","#DAE8FF","#D1D7E0","#F7F9FC","#427BF1"};
@@ -145,5 +146,24 @@ internal sealed class BloomNavigation:Grid
         UpdateLayout();var p=entry.button.TranslatePoint(new Point(),this);highlight.Width=entry.button.ActualWidth;highlight.Height=entry.button.ActualHeight;
         if(animate&&BloomTheme.Animate){offset.BeginAnimation(TranslateTransform.XProperty,new DoubleAnimation(p.X,TimeSpan.FromSeconds(.44)){EasingFunction=new CubicEase{EasingMode=EasingMode.EaseInOut}});offset.BeginAnimation(TranslateTransform.YProperty,new DoubleAnimation(p.Y,TimeSpan.FromSeconds(.44)){EasingFunction=new CubicEase{EasingMode=EasingMode.EaseInOut}});}
         else{offset.BeginAnimation(TranslateTransform.XProperty,null);offset.BeginAnimation(TranslateTransform.YProperty,null);offset.X=p.X;offset.Y=p.Y;}
+    }
+}
+
+internal sealed class BloomSwitch:CheckBox
+{
+    private static readonly DependencyProperty ProgressProperty=DependencyProperty.Register("Progress",typeof(double),typeof(BloomSwitch),new FrameworkPropertyMetadata(0d,FrameworkPropertyMetadataOptions.AffectsRender));
+    internal BloomSwitch()
+    {
+        FontFamily=BloomTheme.LabelFont;FontSize=13;MinHeight=28;HorizontalContentAlignment=HorizontalAlignment.Stretch;FocusVisualStyle=null;
+        var presenter=new FrameworkElementFactory(typeof(ContentPresenter));presenter.SetBinding(ContentPresenter.ContentProperty,new Binding("Content"){RelativeSource=RelativeSource.TemplatedParent});presenter.SetValue(FrameworkElement.MarginProperty,new Thickness(0,0,56,0));presenter.SetValue(FrameworkElement.VerticalAlignmentProperty,VerticalAlignment.Center);Template=new ControlTemplate(typeof(CheckBox)){VisualTree=presenter};
+    }
+    protected override void OnChecked(RoutedEventArgs e){base.OnChecked(e);Move(true);}
+    protected override void OnUnchecked(RoutedEventArgs e){base.OnUnchecked(e);Move(false);}
+    private void Move(bool value){BeginAnimation(ProgressProperty,new DoubleAnimation(value?1:0,TimeSpan.FromSeconds(BloomTheme.Animate&&IsLoaded ? .24 : 0)){EasingFunction=new CubicEase{EasingMode=EasingMode.EaseOut}});}
+    protected override void OnRender(DrawingContext dc)
+    {
+        double p=(double)GetValue(ProgressProperty);var rect=new Rect(Math.Max(0,ActualWidth-38),Math.Max(0,(ActualHeight-22)/2),38,22);
+        dc.DrawRoundedRectangle(BloomTheme.Track,new Pen(BloomTheme.Stroke,.5),rect,11,11);dc.PushOpacity(p);dc.DrawRoundedRectangle(BloomTheme.Primary,null,rect,11,11);dc.Pop();dc.DrawEllipse(IsChecked==true?Brushes.White:BloomTheme.Thumb,null,new Point(rect.X+11+16*p,rect.Y+11),8,8);
+        if(IsKeyboardFocused)dc.DrawRoundedRectangle(null,new Pen(BloomTheme.Blue,1),rect,11,11);
     }
 }

@@ -10,7 +10,7 @@ import sys
 import textwrap
 
 root = pathlib.Path(__file__).resolve().parents[2]
-source = (root / "JotBloomCore/Persistence/DatabaseMigrator.swift").read_text()
+source = (root / "JotBloomCore/Persistence/DatabaseMigrator.swift").read_text(encoding="utf-8")
 operations = dict((operation, textwrap.dedent(sql).strip()) for sql, operation in
                   re.findall(r'"""(.*?)""",\s*operation: "([^"]+)"', source, re.S))
 operations["migrate_v4_library_order"] = re.search(
@@ -34,7 +34,7 @@ if "--write" in sys.argv:
     target.write_text("-- Blank V7 snapshot from Mac DatabaseMigrator.swift. See scripts/check-schema.py.\n"
                       + "\n\n".join(row[2] + ";" for row in rows) + "\nPRAGMA user_version=7;\n")
 candidate = sqlite3.connect(":memory:")
-candidate.executescript(target.read_text())
+candidate.executescript(target.read_text(encoding="utf-8"))
 normalize = lambda rows: [(t, n, re.sub(r'\s+', ' ', sql).strip()) for t, n, sql in rows]
 assert normalize(objects(db)) == normalize(objects(candidate)), "Windows V7 schema differs from Mac"
 assert candidate.execute("PRAGMA user_version").fetchone()[0] == 7

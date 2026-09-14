@@ -31,7 +31,7 @@ internal sealed class SettingsPane:BloomPage
     private void Card(string heading,params UIElement[] elements){var box=new StackPanel();box.Children.Add(Ui.Text(heading,16));foreach(var element in elements){if(element is FrameworkElement e)e.Margin=new Thickness(e.Margin.Left,Math.Max(12,e.Margin.Top),e.Margin.Right,e.Margin.Bottom);box.Children.Add(element);}content.Children.Add(Ui.Card(box));}
     private CheckBox Toggle(string label,bool value,Action<bool> save)
     {
-        var check=new CheckBox{Content=label,IsChecked=value,Foreground=BloomTheme.Text,Margin=new Thickness(0,9,0,9)};bool changing=false;
+        var check=new BloomSwitch{Content=label,IsChecked=value,Foreground=BloomTheme.Text,Margin=new Thickness(0,9,0,9)};bool changing=false;
         check.Click+=(_,_)=>{if(changing)return;try{save(check.IsChecked==true);Feedback.Text="已保存";}catch(Exception e){changing=true;check.IsChecked=!check.IsChecked;changing=false;Feedback.Text=Ui.Error(e);}};return check;
     }
     private ComboBox Choices<T>(IEnumerable<T> items,T selected,Action<T> save)where T:notnull

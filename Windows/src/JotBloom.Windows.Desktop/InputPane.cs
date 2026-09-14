@@ -12,6 +12,7 @@ internal sealed class InputPane:BloomPage
     private readonly StackPanel recent=new();
     private readonly DebouncedSave drafts;
     private readonly ScrollViewer recentScroll;
+    private Button[] saveButtons=[];
     private bool loading=true,composing,saving;
     internal InputPane(AppRuntime runtime):base(runtime)
     {
@@ -21,6 +22,7 @@ internal sealed class InputPane:BloomPage
         var capture=Ui.Text("捕捉此刻",12,BloomTheme.Blue);capture.Margin=new Thickness(36,14,14,0);capture.VerticalAlignment=VerticalAlignment.Top;input.Children.Add(capture);
         input.Children.Add(new BloomIcon("bulb"){Ink=BloomTheme.Blue,Width=16,Height=16,HorizontalAlignment=HorizontalAlignment.Left,VerticalAlignment=VerticalAlignment.Top,Margin=new Thickness(14,14,0,0)});placeholder.Margin=new Thickness(14,48,14,0);placeholder.IsHitTestVisible=false;input.Children.Add(placeholder);Children.Add(input);
         var actions=Ui.Row(Ui.Button("保存到提示词",()=>Run(()=>Save(true))),Ui.Accent("保存灵感","check","blue",()=>Run(()=>Save(false))),Ui.Accent("AI 探讨","sparkles","purple",()=>Run(Discuss)));
+        saveButtons=actions.Children.OfType<Button>().ToArray();
         actions.HorizontalAlignment=HorizontalAlignment.Right;actions.Margin=new Thickness(0,12,42,0);
         var bar=new Grid();bar.Children.Add(actions);Feedback.VerticalAlignment=VerticalAlignment.Bottom;Feedback.MaxWidth=120;Feedback.HorizontalAlignment=HorizontalAlignment.Left;bar.Children.Add(Feedback);Grid.SetRow(bar,1);Children.Add(bar);
         recentScroll=Ui.Scroll(recent);Grid.SetRow(recentScroll,2);Children.Add(recentScroll);recentScroll.Visibility=Visibility.Collapsed;
@@ -31,7 +33,7 @@ internal sealed class InputPane:BloomPage
         editor.PreviewKeyDown+=async(_,e)=>{if(e.Key==Key.Enter&&Keyboard.Modifiers==ModifierKeys.Control&&!composing){e.Handled=true;await Run(()=>Save(false));}};
     }
     internal override void SetExpanded(bool expanded){RowDefinitions[2].Height=expanded?new GridLength(.7,GridUnitType.Star):new GridLength(0);recentScroll.Visibility=expanded?Visibility.Visible:Visibility.Collapsed;}
-    private void Hint()=>placeholder.Visibility=editor.Text.Length==0&&!composing?Visibility.Visible:Visibility.Collapsed;
+    private void Hint(){placeholder.Visibility=editor.Text.Length==0&&!composing?Visibility.Visible:Visibility.Collapsed;foreach(var b in saveButtons)b.IsEnabled=!string.IsNullOrWhiteSpace(editor.Text);}
     internal override async Task ActivateAsync(){if(loading){editor.Text=await Runtime.Store.LoadDraftAsync();loading=false;Hint();}await Recent();}
     internal override Task FlushAsync()=>drafts.FlushAsync();
     private async Task Save(bool prompt)
