@@ -3,6 +3,28 @@ import XCTest
 @testable import JotBloomCore
 
 final class SettingsTests: XCTestCase {
+    func testPromptDefaultUpgradePreservesCustomPreferences() throws {
+        let suite = "jotbloom.prompt-upgrade." + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = AppSettingsStore(defaults: defaults)
+        XCTAssertEqual(store.load().chatSystemPrompt, ChatContext.system)
+        XCTAssertLessThanOrEqual(ChatContext.system.count, 2000)
+        for previous in [ChatContext.previousSystem, ChatContext.legacySystem] {
+            defaults.set(["version": 1, "chatSystemPrompt": previous], forKey: "jotbloom.settings.v1")
+            let upgraded = store.load()
+            XCTAssertEqual(upgraded.chatSystemPrompt, ChatContext.system)
+            store.save(upgraded)
+            XCTAssertEqual(store.load().chatSystemPrompt, ChatContext.system)
+        }
+        for custom in ["请用英文回答。", ChatContext.previousSystem + "\n请给出例子。"] {
+            var settings = AppSettings(); settings.chatSystemPrompt = custom
+            store.save(settings)
+            XCTAssertEqual(store.load().chatSystemPrompt, custom)
+            let messages = try ChatContext.messages(history: [], input: "你好", systemPrompt: store.load().chatSystemPrompt)
+            XCTAssertEqual(messages.first?["content"], ChatContext.productRules + "\n\n用户行为偏好：\n" + custom)
+        }
+    }
     func testDefaultsAndMalformedFieldsDoNotResetPanelPreferences() {
         let suite = "JotBloom.SettingsTests." + UUID().uuidString
         let defaults = UserDefaults(suiteName: suite)!

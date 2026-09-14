@@ -14,8 +14,8 @@ struct GlobalSearchRow: View {
     var body: some View {
         Button(action: onActivate) {
             HStack(spacing: 8) {
-                Image(systemName: symbolName)
-                    .font(.system(size: 16))
+                BloomSymbol(symbolName)
+                    .font(BloomTypography.font(16))
                     .foregroundColor(primaryColor)
                     .frame(width: 20)
                     .accessibilityHidden(true)
@@ -27,7 +27,7 @@ struct GlobalSearchRow: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 Text(isCopied ? "已复制" : relativeTime)
-                    .font(.system(size: 11))
+                    .font(BloomTypography.font(11))
                     .foregroundColor(secondaryColor)
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)

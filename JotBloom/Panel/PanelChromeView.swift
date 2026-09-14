@@ -13,10 +13,10 @@ struct PanelChromeView: View {
             HStack(spacing: 3) {
                 slots(Array(state.preferences.order.suffix(3)))
                 Button(action: onSettings) {
-                    Image(systemName: "gearshape").font(.system(size: 14))
-                        .foregroundStyle(state.isSettingsOpen ? BloomTheme.blue : BloomTheme.muted)
-                        .frame(width: 26, height: min(28, state.notchHeight - 4))
-                        .background(state.isSettingsOpen ? BloomTheme.selected : .clear, in: Capsule())
+                    BloomSymbol("gearshape", size: 14)
+                        .foregroundStyle(state.isSettingsOpen ? Color.white : BloomTheme.muted)
+                        .frame(width: 26, height: max(14, min(24, state.notchHeight - 8)))
+                        .background { if state.isSettingsOpen { BloomSelectionSurface(radius: 9) } }
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain).help("设置 · ⌘,").accessibilityLabel("设置")
@@ -29,7 +29,7 @@ struct PanelChromeView: View {
             ForEach(slots, id: \.self) { slot in
                 BloomTabButton(slot: slot,
                     selected: !state.isSettingsOpen && state.selectedTab.rawValue == slot.rawValue,
-                    height: min(28, state.notchHeight - 4),
+                    height: max(14, min(24, state.notchHeight - 8)),
                     position: (state.preferences.order.firstIndex(of: slot) ?? 0) + 1) {
                     if let tab = PanelTab(rawValue: slot.rawValue) { onSelectTab(tab) }
                 }
@@ -49,15 +49,15 @@ private struct BloomTabButton: View {
     var body: some View {
         Button(action: action) {
             ViewThatFits(in: .horizontal) {
-                HStack(spacing: 3) {
-                    Image(systemName: slot.symbol).font(.system(size: 12))
-                    Text(slot.title).font(.system(size: 10, weight: .medium)).fixedSize()
+                HStack(spacing: 5) {
+                    BloomSymbol(slot.symbol, size: 14)
+                    Text(slot.title).font(BloomTypography.font(10, role: .label)).fixedSize()
                 }
-                Image(systemName: slot.symbol).font(.system(size: 14))
+                BloomSymbol(slot.symbol, size: 14)
             }
             .padding(.horizontal, 6).frame(maxWidth: .infinity).frame(height: height)
-            .foregroundStyle(!slot.isAvailable ? BloomTheme.muted.opacity(0.35) : selected ? BloomTheme.blue : BloomTheme.muted)
-            .modifier(BloomSurface(color: selected ? BloomTheme.selected : hovering ? BloomTheme.surface : .clear, radius: 18))
+            .foregroundStyle(!slot.isAvailable ? BloomTheme.muted.opacity(0.35) : selected ? Color.white : BloomTheme.muted)
+            .background { if selected { BloomSelectionSurface(radius: 9) } else { RoundedRectangle(cornerRadius: 9).fill(hovering ? BloomTheme.surface : .clear) } }
             .contentShape(Capsule())
         }
         .buttonStyle(.plain).disabled(!slot.isAvailable).onHover { hovering = $0 }

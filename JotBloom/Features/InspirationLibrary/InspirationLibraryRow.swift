@@ -12,6 +12,7 @@ struct InspirationLibraryRow: View {
     var onMove: ((Int64, Int64, Bool) -> Void)? = nil
 
     @Environment(\.bloomExpanded) private var expanded
+    @Environment(\.bloomReduceMotion) private var reduceMotion
     @State private var isHovering = false
 
     var body: some View {
@@ -30,11 +31,11 @@ struct InspirationLibraryRow: View {
                         .truncationMode(.tail)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Text(inspiration.body.isEmpty ? "留住一个念头" : inspiration.body)
-                        .font(.system(size: 11)).foregroundStyle(BloomTheme.muted).lineLimit(1)
+                        .font(BloomTypography.font(11)).foregroundStyle(BloomTheme.muted).lineLimit(1)
                     }
 
                     Text(SavedTime.text(inspiration.createdAtUTCms))
-                    .font(.system(size: 11))
+                    .font(BloomTypography.font(11))
                     .foregroundColor(secondaryColor)
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
@@ -59,6 +60,7 @@ struct InspirationLibraryRow: View {
                 .fill(backgroundColor)
                 .padding(.horizontal, 1)
         }
+        .animation(reduceMotion ? nil : BloomTheme.layoutAnimation, value: expanded)
         .contentShape(Rectangle())
         .onHover { isHovering = $0 }
     }

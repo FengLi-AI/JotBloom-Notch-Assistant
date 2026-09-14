@@ -19,6 +19,7 @@ enum InspirationDetailOrigin: Equatable {
 
 @MainActor
 final class PanelViewState: ObservableObject {
+    var onChangeAppearance: ((PanelAppearance, NSRect) -> Void)?
     private let preferencesStore: PanelPreferencesStore
     @Published var preferences: PanelPreferences { didSet { preferencesStore.save(preferences) } }
     @Published private(set) var isSettingsOpen = false
@@ -29,6 +30,10 @@ final class PanelViewState: ObservableObject {
     func useKeyboardNavigation() { if !keyboardNavigation { keyboardNavigation = true } }
     func usePointerNavigation() { if keyboardNavigation { keyboardNavigation = false } }
     private var expansionBeforeSettings = false
+    private var expansionBeforeFocusedTabs = false
+    @Published private(set) var isPresented = false
+    func setPresented(_ value: Bool) { isPresented = value }
+    private func prefersExpanded(_ tab: PanelTab) -> Bool { tab == .chat || tab == .globalSearch }
     private var isolatedPreferencesSuite: String?
 
     init() {
@@ -45,6 +50,12 @@ final class PanelViewState: ObservableObject {
 #endif
         preferencesStore = PanelPreferencesStore(defaults: defaults)
         preferences = preferencesStore.load()
+#if DEBUG
+        if isolatedPreferencesSuite != nil,
+           ProcessInfo.processInfo.environment["JOTBLOOM_REVIEW_APPEARANCE"] == "light" {
+            preferences.appearance = .light
+        }
+#endif
     }
 
     deinit {
@@ -69,7 +80,7 @@ final class PanelViewState: ObservableObject {
     }
 
     private func setExpanded(_ value: Bool) {
-        withAnimation(reducesMotion ? nil : BloomTheme.layoutAnimation) { isExpanded = value }
+        isExpanded = value
     }
     @Published private(set) var notchHeight: CGFloat = NSStatusBar.system.thickness
     @Published private(set) var notchWidth: CGFloat = PanelGeometry.fallbackNotchWidth
@@ -99,8 +110,12 @@ final class PanelViewState: ObservableObject {
     }
 
     func select(_ tab: PanelTab) {
+        let wasFocused = prefersExpanded(selectedTab)
+        let enteringFocused = prefersExpanded(tab)
+        if enteringFocused && !wasFocused { expansionBeforeFocusedTabs = isExpanded }
         selectedTab = tab
-        if tab == .globalSearch { expand() }
+        if enteringFocused { setExpanded(true) }
+        else if wasFocused { setExpanded(expansionBeforeFocusedTabs) }
     }
 
     func beginInspirationDetail(from origin: InspirationDetailOrigin) {
@@ -115,7 +130,8 @@ final class PanelViewState: ObservableObject {
         keyboardNavigation = false
         selectedTab = PanelTab(rawValue: preferences.defaultSlot.rawValue) ?? .inspiration
         isSettingsOpen = false
-        isExpanded = selectedTab == .globalSearch
+        expansionBeforeFocusedTabs = false
+        isExpanded = prefersExpanded(selectedTab)
         inspirationDetailOrigin = nil
     }
 }

@@ -13,12 +13,15 @@ struct PanelRootView: View {
     let onSettings: () -> Void
     let onCloseSettings: () -> Void
     let dataDirectory: URL?
+    var onExternalLinkOpened: () -> Void = {}
+    @Environment(\.openURL) private var systemOpenURL
     var settingsModel: SettingsViewModel? = nil
     var promptModel: PromptLibraryViewModel? = nil
     var chatModel: ChatViewModel? = nil
     var onChatCopy: (String) -> Bool = { _ in false }
 
     var body: some View {
+        GeometryReader { viewport in
         VStack(spacing: 0) {
             PanelChromeView(
                 state: panelState,
@@ -26,7 +29,10 @@ struct PanelRootView: View {
                 onSettings: onSettings
             )
                 .frame(height: panelState.notchHeight)
+                .bloomMeasure("chrome")
 
+            GeometryReader { content in
+            Group {
             if panelState.isSettingsOpen {
                 PanelSettingsView(state: panelState, dataDirectory: dataDirectory, onBack: onCloseSettings, model: settingsModel)
             } else if isInspirationDetailVisible {
@@ -58,6 +64,10 @@ struct PanelRootView: View {
                     GlobalSearchView(viewModel: globalSearchViewModel)
                 }
             }
+            }.frame(width: content.size.width, height: content.size.height, alignment: .topLeading)
+                .clipped()
+            }
+        }.frame(width: viewport.size.width, height: viewport.size.height, alignment: .top)
         }
         .overlay(alignment: .bottomTrailing) {
             if !panelState.isSettingsOpen && !(panelState.selectedTab == .prompts && panelState.isPromptEditorOpen) { HStack(spacing: 8) {
@@ -69,7 +79,9 @@ struct PanelRootView: View {
                 panelState.toggleExpansion()
             }
             }
-            .padding(8)
+            .padding(.trailing, 16)
+            .bloomMeasure("panelFooterControls")
+            .padding(.bottom, 16)
             }
         }
         .disabled(clipboardViewModel.confirmingClear)
@@ -79,8 +91,8 @@ struct PanelRootView: View {
                 ZStack {
                     Color.black.opacity(0.45).contentShape(Rectangle()).onTapGesture { }
                     VStack(alignment: .leading, spacing: 18) {
-                        Text("清空剪贴板历史？").font(.system(size: 18, weight: .semibold))
-                        Text(clipboardViewModel.clearConfirmationMessage).font(.system(size: 13)).foregroundStyle(BloomTheme.muted)
+                        Text("清空剪贴板历史？").font(BloomTypography.font(18, role: .label))
+                        Text(clipboardViewModel.clearConfirmationMessage).font(BloomTypography.font(13)).foregroundStyle(BloomTheme.muted)
                         HStack {
                             Spacer()
                             Button("取消") { clipboardViewModel.confirmingClear = false }.buttonStyle(BloomButtonStyle()).keyboardShortcut(.cancelAction)
@@ -91,13 +103,16 @@ struct PanelRootView: View {
             }
         }
         .background(BloomTheme.surface)
+        .background(BloomScrollbars(reduceMotion: panelState.reducesMotion))
+        .font(BloomTypography.font(13))
         .foregroundStyle(BloomTheme.text)
         .tint(BloomTheme.blue)
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(panelState.preferences.appearance == .dark ? .dark : .light)
+        .environment(\.bloomVisible, panelState.isPresented)
+        .environment(\.openURL, BloomExternalLinks.action(using: systemOpenURL, onOpened: onExternalLinkOpened))
         .environment(\.bloomExpanded, panelState.isExpanded)
         .environment(\.bloomReduceMotion, panelState.reducesMotion)
         .environment(\.bloomKeyboardNavigation, panelState.keyboardNavigation)
-        .animation(panelState.reducesMotion ? nil : BloomTheme.layoutAnimation, value: panelState.isExpanded)
         .onChange(of: panelState.selectedTab) { tab in
             switch tab {
             case .inspiration:
@@ -138,6 +153,16 @@ struct PanelRootView: View {
             return panelState.selectedTab == .globalSearch
         case .none:
             return false
+        }
+    }
+}
+
+/// Collapse only after the system accepts the external URL handoff.
+enum BloomExternalLinks {
+    static func action(using system: OpenURLAction, onOpened: @escaping () -> Void) -> OpenURLAction {
+        OpenURLAction { url in
+            system(url) { accepted in if accepted { onOpened() } }
+            return .handled
         }
     }
 }

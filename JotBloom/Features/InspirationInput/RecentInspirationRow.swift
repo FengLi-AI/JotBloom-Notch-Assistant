@@ -14,7 +14,7 @@ struct RecentInspirationRow: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
                 Text(inspiration.body.isEmpty ? "留住一个念头" : inspiration.body)
-                    .font(.system(size: 11)).foregroundStyle(BloomTheme.muted).lineLimit(1)
+                    .font(BloomTypography.font(11)).foregroundStyle(BloomTheme.muted).lineLimit(1)
             }
 
             Spacer(minLength: 8)
@@ -22,7 +22,7 @@ struct RecentInspirationRow: View {
             Text(
                 SavedTime.text(inspiration.createdAtUTCms)
             )
-            .font(.system(size: 11))
+            .font(BloomTypography.font(11))
             .foregroundColor(BloomTheme.muted)
             .lineLimit(1)
         }

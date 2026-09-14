@@ -6,7 +6,13 @@
 
 [访问官网](https://fengli-ai.github.io/JotBloom-Notch-Assistant/) · [版本说明](https://github.com/FengLi-AI/JotBloom-Notch-Assistant/releases)
 
-![萌生灵感记录界面](site/assets/inspiration.png)
+![萌生深色灵感记录界面](site/assets/1.0.4/dark-inspiration.png)
+
+<details><summary>查看浅色界面</summary>
+
+![萌生浅色灵感记录界面](site/assets/1.0.4/light-inspiration.png)
+
+</details>
 
 ## 能做什么
 
@@ -15,12 +21,13 @@
 - **复用提示词**：编辑、保存、另存、收藏常用和拖动排序；配置 AI 后可自动生成短标题。
 - **和 AI 讨论**：使用自己的模型接口，保存对话历史，将讨论整理为灵感；可调整系统提示词。
 - **一起搜索**：搜索灵感、剪贴板和提示词，再按结果分类查找。
-- **按习惯设置**：调整快捷键、顶部标签、默认入口和数据保存位置。
+- **按习惯设置**：切换深色／浅色，调整快捷键、顶部标签、默认入口和数据保存位置。
 
 ## 更新记录
 
 | 更新日期 | 版本 | 更新内容 |
 | --- | --- | --- |
+| 2026-09-15 | Mac 1.0.4 / Windows 1.0.4 测试版 | 新增深浅双主题、MiSans 与统一图标，优化渐变按钮、间距与切换动效；同步新版默认系统提示词和固定产品约束。 |
 | 2026-09-12 | Mac 1.0.3 / Windows 1.0.3 测试版 | 快捷键设置新增“恢复默认”，点击立即生效并保存；冲突时保留原快捷键。 |
 | 2026-09-11 | Windows 1.0.2 测试版 | 新增 Windows 客户端，支持灵感、剪贴板、提示词、搜索和 AI 对话，可通过屏幕顶部提示条或快捷键呼出。 |
 | 2026-09-11 | Mac 1.0.2 | 通用设置中的快捷操作置顶，新增“关于”页面、作者信息和最新版本检查。 |
@@ -34,8 +41,8 @@
 
 | 平台 | 版本 | 系统与架构 |
 | --- | --- | --- |
-| Mac | 1.0.3 | macOS 13+，Apple Silicon / Intel |
-| Windows | 1.0.3 测试版 | Windows 10 22H2 / Windows 11，Intel / AMD 64 位 |
+| Mac | 1.0.4 | macOS 13+，Apple Silicon / Intel |
+| Windows | 1.0.4 测试版 | Windows 10 22H2 / Windows 11，Intel / AMD 64 位 |
 
 Mac 打开 DMG 后，将 **萌生｜JotBloom.app** 拖入“应用程序”；Windows 双击 EXE 完成安装。首次启动会请你选择数据保存位置。更新前保存内容并退出旧版，保留重要数据备份。
 

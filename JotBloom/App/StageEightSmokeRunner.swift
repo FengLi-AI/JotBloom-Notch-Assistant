@@ -54,8 +54,8 @@ enum StageEightSmokeRunner {
             input.start(); library.start(); clipboard.start(); await chat.start()
             try await wait { input.isReady && library.isReady && clipboard.isReady }
             _ = panel.present(); _ = panel.showChat(); try await settle()
-            checks.append(("chat_native_compact", panel.debugSnapshot.selectedTab == "chat" && !panel.debugSnapshot.isExpanded))
-            try panel.debugCapturePromptPanel(to: output.appendingPathComponent("chat-300.png"))
+            checks.append(("chat_entry_auto_expands", panel.debugSnapshot.selectedTab == "chat" && panel.debugSnapshot.isExpanded))
+            try panel.debugCapturePromptPanel(to: output.appendingPathComponent("chat-entry-700.png"))
             checks += panel.debugChatInputProbe()
             chat.draft = "我想做一个轻量的个人灵感工具，如何验证方向？"; chat.send()
             try await wait { !chat.turns.isEmpty && !chat.turns[0].answer.isEmpty }
@@ -109,12 +109,29 @@ enum StageEightSmokeRunner {
             _ = longPanel.debugPerformKeyEquivalent(keyCode: UInt16(kVK_DownArrow), modifiers: .command); try await settle()
             checks.append(("long_chat_first_page_bounded", longChat.turns.count == 50 && longChat.hasMore))
             longChat.followingLatest = false
-            let position = longPanel.debugChatScrollOffset(set: 150) ?? -1000; longChat.scrollOffset = position
+            // A jump into a lazy list realizes rows and refines its estimated offset.
+            // Establish the resting reading position before testing later streaming/route changes.
+            let requestedPosition = longPanel.debugChatScrollOffset(set: 150) ?? -1000
+            try await settle()
+            let position = longPanel.debugChatScrollOffset() ?? -1000; longChat.scrollOffset = position
+            print("JOTBLOOM_STAGE8_BASELINE requested=\(requestedPosition) settled=\(position)")
             longChat.draft = "继续时不要抢走滚动位置"; longChat.send(); try await wait { !longChat.busy }; try await settle()
+            print("JOTBLOOM_STAGE8_RESTORE expected=\(position) actual=\(longPanel.debugChatScrollOffset() ?? -2000) model=\(longChat.scrollOffset ?? -2000) following=\(longChat.followingLatest)")
             checks.append(("stream_does_not_steal_old_scroll", abs((longPanel.debugChatScrollOffset() ?? -2000) - position) < 5))
             longPanel.debugSelectClipboard(); _ = longPanel.showChat(); try await settle()
             checks.append(("tab_restores_exact_scroll", abs((longPanel.debugChatScrollOffset() ?? -2000) - position) < 5))
             try longPanel.debugCapturePromptPanel(to: output.appendingPathComponent("chat-long-scrolled.png"))
+            for cycle in 0..<3 {
+                longChat.followingLatest = false
+                let reading = longPanel.debugChatScrollOffset(set: 150 + CGFloat(cycle) * 40) ?? -1000
+                longChat.scrollOffset = reading
+                longChat.draft = "保持阅读位置 \(cycle)"; longChat.send(); try await wait { !longChat.busy }; try await settle()
+                let streamed = longPanel.debugChatScrollOffset() ?? -2000
+                longPanel.debugSelectClipboard(); try await settle(); _ = longPanel.showChat(); try await settle()
+                let returned = longPanel.debugChatScrollOffset() ?? -2000
+                print("JOTBLOOM_STAGE8_STRESS cycle=\(cycle) expected=\(reading) streamed=\(streamed) returned=\(returned)")
+                checks.append(("reading_position_cycle_\(cycle)", abs(streamed - reading) < 5 && abs(returned - reading) < 5))
+            }
             let anchor = longChat.scrollAnchor, anchorOffset = longChat.scrollAnchorOffset
             longChat.loadMore(); try await wait { !longChat.loadingMore }; try await settle()
             // LazyVStack may realize an additional preceding row after insertion. Compare

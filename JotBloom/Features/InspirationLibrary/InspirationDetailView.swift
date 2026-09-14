@@ -23,7 +23,7 @@ struct InspirationDetailView: View {
 
             TextField("标题", text: $viewModel.detailTitle)
                 .textFieldStyle(.plain)
-                .font(.system(size: 18, weight: .semibold))
+                .font(BloomTypography.font(18, role: .label))
                 .padding(.horizontal, 14)
                 .frame(height: 46)
                 .modifier(BloomSurface(color: BloomTheme.well))
@@ -34,7 +34,7 @@ struct InspirationDetailView: View {
             Spacer().frame(height: 8)
 
             TextEditor(text: $viewModel.detailBody)
-                .font(.system(size: 14))
+                .font(BloomTypography.font(14))
                 .scrollContentBackground(.hidden)
                 .padding(12)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -46,7 +46,7 @@ struct InspirationDetailView: View {
             Spacer().frame(height: 8)
 
             if let feedback = viewModel.feedback, feedback.kind == .error {
-                Text(feedback.message).font(.system(size: 11))
+                Text(feedback.message).font(BloomTypography.font(11))
                     .foregroundStyle(BloomTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -80,8 +80,8 @@ struct InspirationDetailView: View {
             Button {
                 onBack()
             } label: {
-                Label("返回\(backDestinationName)", systemImage: "chevron.left")
-                    .font(.system(size: 14, weight: .medium))
+                BloomActionLabel(title: "返回\(backDestinationName)", symbol: "chevron.left")
+                    .font(BloomTypography.font(14, role: .label))
                     .padding(.horizontal, 10).frame(height: 28)
                     .modifier(BloomSurface(color: BloomTheme.raised, radius: 12))
                     .contentShape(Rectangle())
@@ -91,7 +91,7 @@ struct InspirationDetailView: View {
             .accessibilityLabel("返回\(backDestinationName)")
 
             Text(viewModel.saveStatusMessage)
-            .font(.system(size: 11))
+            .font(BloomTypography.font(11))
             .foregroundColor(BloomTheme.muted)
             .lineLimit(1)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -132,10 +132,10 @@ struct InspirationDetailView: View {
                 VStack(alignment: .trailing, spacing: 2) {
                     Text("保存于 \(SavedTime.text(detail.createdAtUTCms))")
                 }
-                .font(.system(size: 10)).lineLimit(1)
+                .font(BloomTypography.font(10)).lineLimit(1)
             }
         }
-        .font(.system(size: 11))
+        .font(BloomTypography.font(11))
         .foregroundColor(BloomTheme.muted)
         .padding(.trailing, 36)
         .frame(height: 28)

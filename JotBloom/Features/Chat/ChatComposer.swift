@@ -14,7 +14,7 @@ struct ChatComposer: NSViewRepresentable {
         editor.isRichText = false; editor.isAutomaticQuoteSubstitutionEnabled = false
         editor.drawsBackground = false; editor.textColor = NSColor(BloomTheme.text)
         editor.insertionPointColor = NSColor(BloomTheme.blue)
-        editor.font = .systemFont(ofSize: 14); editor.textContainerInset = NSSize(width: 5, height: 5)
+        editor.font = BloomTypography.nsFont(14); editor.textContainerInset = NSSize(width: 5, height: 5)
         editor.isVerticallyResizable = true; editor.isHorizontallyResizable = false
         editor.autoresizingMask = [.width]; editor.textContainer?.widthTracksTextView = true
         editor.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
@@ -27,6 +27,8 @@ struct ChatComposer: NSViewRepresentable {
         context.coordinator.parent = self
         guard let editor = view.documentView as? ChatTextView else { return }
         editor.send = onSend; editor.isEditable = enabled
+        editor.textColor = NSColor(BloomTheme.text)
+        editor.insertionPointColor = NSColor(BloomTheme.blue)
         if !editor.hasMarkedText(), editor.string != text { editor.string = text }
         if context.coordinator.focus != focusRequest {
             context.coordinator.focus = focusRequest
