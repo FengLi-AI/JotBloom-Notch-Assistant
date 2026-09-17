@@ -400,6 +400,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         coordinator.onVisibilityChanged = { [weak hotZoneController, weak pasteboardMonitor] isVisible in
             hotZoneController?.setPanelVisible(isVisible)
             pasteboardMonitor?.setPanelVisible(isVisible)
+            ApplicationExtensionHost.shared.panelVisibilityDidChange(isVisible)
         }
 
         let hotKeyManager = HotKeyManager { [weak coordinator, weak settingsModel] in
@@ -457,6 +458,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             settingsModel.feedback = "唤起快捷键注册失败，已恢复菜单栏入口。请在通用设置重新录制。"
         }
         menuBarController.setVisible(settingsModel.value.showMenuBarIcon)
+
+        ApplicationExtensionHost.shared.start(context: ApplicationExtensionContext(
+            defaults: settingsDefaults,
+            isPanelVisible: { [weak coordinator] in coordinator?.isVisible == true },
+            showPanel: { [weak coordinator, weak settingsModel] in
+                guard settingsModel?.blocksPanelInteraction != true else { return }
+                coordinator?.show()
+            },
+            hidePanel: { [weak coordinator] in coordinator?.hide() },
+            showSettings: { [weak coordinator, weak panelController, weak settingsModel] in
+                guard settingsModel?.blocksPanelInteraction != true else { return }
+                coordinator?.show()
+                panelController?.openSettings()
+            }
+        ))
 
 #if DEBUG
         if ProcessInfo.processInfo.environment["JOTBLOOM_UI_WALKTHROUGH"] != "1" { hotZoneController.start() }
@@ -640,6 +656,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        ApplicationExtensionHost.shared.stop()
         pasteboardMonitor?.stop()
         hotKeyManager?.unregister()
         hotZoneController?.stop()

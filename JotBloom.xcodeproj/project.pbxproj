@@ -28,6 +28,7 @@
 		0E20DDD85F351451470F033E /* StageNineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0711EAED47F196DA8CF9BD0 /* StageNineTests.swift */; };
 		111D1F76F06484153DE06789 /* PanelPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 196BCA2B61C38575766A0FB7 /* PanelPreferences.swift */; };
 		1195CD9DA31DB461C20D06B2 /* StageSixSmokeRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = D18E8F24B4C421D3EDD29174 /* StageSixSmokeRunner.swift */; };
+		14F2C83DCF7819A93D53771C /* ApplicationExtensionHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2DEDCDD0A4CD588F174EFC5 /* ApplicationExtensionHost.swift */; };
 		163731D6E65624B48E3297A7 /* JotBloomStore+Chat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 193B03C902FF965A2E3F0702 /* JotBloomStore+Chat.swift */; };
 		18F395A70F77194125D99C46 /* StageTenOperationsSmokeRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C0027589A0CCD1D501F0DCC /* StageTenOperationsSmokeRunner.swift */; };
 		1907C384E9CD2A689E9D692B /* archive.svg in Resources */ = {isa = PBXBuildFile; fileRef = A111B4C5204AACBFFCAA2684 /* archive.svg */; };
@@ -396,6 +397,7 @@
 		C1BB247E724ED26B7DB941D9 /* JotBloomStore+Prompts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "JotBloomStore+Prompts.swift"; sourceTree = "<group>"; };
 		C29DF5402FCCA89ACD129D90 /* StageSevenSmokeRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StageSevenSmokeRunner.swift; sourceTree = "<group>"; };
 		C2D81F3AE9746710EA6B9CF9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		C2DEDCDD0A4CD588F174EFC5 /* ApplicationExtensionHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationExtensionHost.swift; sourceTree = "<group>"; };
 		C43154BE44C8050A718E4946 /* BloomLayoutDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BloomLayoutDiagnostics.swift; sourceTree = "<group>"; };
 		C50144A61A6F19EC60E865EF /* PromptLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptLibraryView.swift; sourceTree = "<group>"; };
 		C77C86B87FB927D77B799692 /* history.svg */ = {isa = PBXFileReference; path = history.svg; sourceTree = "<group>"; };
@@ -504,6 +506,14 @@
 				A8C7F809885A72AA751E72F5 /* RecentInspirationRow.swift */,
 			);
 			path = InspirationInput;
+			sourceTree = "<group>";
+		};
+		12482F133096E37FE5E50F48 /* Extensions */ = {
+			isa = PBXGroup;
+			children = (
+				C2DEDCDD0A4CD588F174EFC5 /* ApplicationExtensionHost.swift */,
+			);
+			path = Extensions;
 			sourceTree = "<group>";
 		};
 		2E3DEA04313BC4B70F6DAB9F /* ClipboardHistory */ = {
@@ -793,6 +803,7 @@
 				862A1FA4A68C7F61B2B27EA5 /* Info.plist */,
 				C87A9CC259C60F134A2A6F96 /* App */,
 				50FD027A8EE3237C73572D4E /* Clipboard */,
+				12482F133096E37FE5E50F48 /* Extensions */,
 				821EF662FC47D4E6BEBEA96B /* Features */,
 				8DCDA2D9A93332F39C28A83F /* Panel */,
 				FCA9A62A900ED34CB31B8AFE /* Platform */,
@@ -1061,6 +1072,7 @@
 			files = (
 				91D4C24173AED61612D068A0 /* AboutSettingsView.swift in Sources */,
 				4E303EB22AF04ED7004BEBAF /* AppDelegate.swift in Sources */,
+				14F2C83DCF7819A93D53771C /* ApplicationExtensionHost.swift in Sources */,
 				9D8C42E4F24BC06C48E9E55F /* BloomApplicationIcon.swift in Sources */,
 				70B830E9B794F5F20947ADC3 /* BloomLayoutDiagnostics.swift in Sources */,
 				BC65352F2E627AF46852D6D6 /* BloomListFocus.swift in Sources */,

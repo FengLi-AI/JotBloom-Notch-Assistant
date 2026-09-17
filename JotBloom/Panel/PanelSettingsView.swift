@@ -3,19 +3,26 @@ import JotBloomCore
 import SwiftUI
 
 struct PanelSettingsView: View {
+    @ObservedObject private var extensions = ApplicationExtensionHost.shared
     @ObservedObject var state: PanelViewState
     let dataDirectory: URL?
     let onBack: () -> Void
     var model: SettingsViewModel? = nil
     @Environment(\.bloomReduceMotion) private var reduceMotion
     @State private var appearanceAnchor: NSView?
-    private let sections = [("general", "通用", "slider.horizontal.3"),
+    private var sections: [(String, String, String)] {
+        var items = [("general", "通用", "slider.horizontal.3"),
                             ("tabs", "顶部标签", "rectangle.3.group"),
                             ("clipboard", "剪贴板", "doc.on.clipboard"),
                             ("storage", "存储与隐私", "externaldrive"),
                             ("ai", "AI 接口", "sparkles"),
                             ("systemPrompt", "系统提示词", "text.bubble"),
                             ("about", "关于", "info.circle")]
+        if let module = extensions.module {
+            items.insert(("extensions", module.settingsTitle, "sparkles"), at: 1)
+        }
+        return items
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -71,6 +78,8 @@ struct PanelSettingsView: View {
 
     @ViewBuilder private var sectionContent: some View {
         switch state.settingsSection {
+        case "extensions":
+            if let module = extensions.module { module.settingsView }
         case "tabs":
             heading("顶部标签", "调整两侧排列；⌘1–6 跟随位置变化。未开放的标签仍保留位置。")
             VStack(spacing: 5) {
