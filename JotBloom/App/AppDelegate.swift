@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let logger = Logger(subsystem: "com.jotbloom.mengsheng", category: "lifecycle")
 
     private var store: JotBloomStore?
+    private var externalInspirationWriter: ExternalInspirationWriter?
     private var inspirationViewModel: InspirationInputViewModel?
     private var inspirationLibraryViewModel: InspirationLibraryViewModel?
     private var clipboardService: ClipboardService?
@@ -296,6 +297,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         inspirationViewModel.onInspirationCreated = inspirationCreated
+        let canSaveExternal: () -> Bool = { [weak self, weak settingsModel] in
+            self?.terminationRetryScheduled == false && settingsModel?.blocksPanelInteraction == false
+        }
+        let externalWriter = ExternalInspirationWriter(store: store, canWrite: canSaveExternal) { [weak inspirationViewModel] id in
+            inspirationViewModel?.refreshRecentInspirations()
+            inspirationCreated(id)
+        }
+        externalInspirationWriter = externalWriter
         promptModel.onInspirationCreated = inspirationCreated
         chatModel.onSummaryCreated = { [weak inspirationViewModel] id in inspirationViewModel?.refreshRecentInspirations(); inspirationCreated(id) }
         inspirationLibraryViewModel.onRequestEnrichment = inspirationCreated
@@ -471,7 +480,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard settingsModel?.blocksPanelInteraction != true else { return }
                 coordinator?.show()
                 panelController?.openSettings()
-            }
+            },
+            canSaveInspiration: canSaveExternal,
+            saveInspiration: { text in try await externalWriter.save(text) }
         ))
 
 #if DEBUG
@@ -582,6 +593,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if inspirationViewModel.hasPendingSave
+            || externalInspirationWriter?.hasPendingSave == true
             || !clipboardTerminationPrepared
             || !inspirationLibraryTerminationPrepared {
             if !terminationRetryScheduled {
@@ -604,6 +616,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         return
                     }
                     await inspirationViewModel.waitForPendingSave()
+                    await externalInspirationWriter?.drain()
                     guard await promptViewModel?.prepareForMaintenance() != false else {
                         terminationRetryScheduled = false
                         pasteboardMonitor?.start()
@@ -734,6 +747,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self, let store, let input = inspirationViewModel, let library = inspirationLibraryViewModel else { throw SettingsError.maintenance }
             capturePermission.setAllowed(false); pasteboardMonitor?.setMaintenancePaused(true)
             defer { restoreCaptureAfterMaintenance() }
+            await externalInspirationWriter?.drain()
             await clipboardCaptureCoordinator?.stopAndDrain()
             guard await chatViewModel?.prepareForMaintenance() != false else { throw SettingsError.migrationFailed }
             try await input.prepareForTermination()

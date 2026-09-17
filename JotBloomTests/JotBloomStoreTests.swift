@@ -120,6 +120,38 @@ final class JotBloomStoreTests: XCTestCase {
         XCTAssertEqual(try store.listRecentInspirationsSynchronously(), [saved])
     }
 
+    func testExternalSavePreservesDraftAndFullTextAcrossReopen() async throws {
+        let directory = try TestTemporaryDirectory.make()
+        defer { TestTemporaryDirectory.remove(directory) }
+        let store = try JotBloomStore(dataDirectoryURL: directory)
+        try store.persistDraftSynchronously(kind: .inspiration, content: "正在写的草稿", updatedAtUTCms: 30)
+        let text = " 浏览器中选中的第一行\n第二行与 emoji 🌱\n"
+        let saved = try await store.saveExternalInspiration(text, timestampUTCms: 31)
+        XCTAssertEqual(saved.body, text)
+        XCTAssertEqual(try store.loadDraftSynchronously(kind: .inspiration)?.content, "正在写的草稿")
+        store.close()
+        let reopened = try JotBloomStore(dataDirectoryURL: directory)
+        defer { reopened.close() }
+        XCTAssertEqual(try reopened.listRecentInspirationsSynchronously().first?.body, text)
+        do { _ = try await reopened.saveExternalInspiration(text, timestampUTCms: 32); XCTFail("duplicate must not create another record") }
+        catch { XCTAssertEqual(error as? PromptError, .duplicateInspiration) }
+        XCTAssertEqual(try reopened.listRecentInspirationsSynchronously().count, 1)
+        XCTAssertEqual(try reopened.loadDraftSynchronously(kind: .inspiration)?.content, "正在写的草稿")
+    }
+
+    func testExternalSaveRejectsEmptyAndClosedStoreWithoutConsumingDraft() async throws {
+        let directory = try TestTemporaryDirectory.make()
+        defer { TestTemporaryDirectory.remove(directory) }
+        let store = try JotBloomStore(dataDirectoryURL: directory)
+        try store.persistDraftSynchronously(kind: .inspiration, content: "保留", updatedAtUTCms: 30)
+        do { _ = try await store.saveExternalInspiration(" \n", timestampUTCms: 31); XCTFail("empty input") }
+        catch { XCTAssertEqual(error as? PromptError, .empty) }
+        XCTAssertEqual(try store.loadDraftSynchronously(kind: .inspiration)?.content, "保留")
+        store.close()
+        do { _ = try await store.saveExternalInspiration("写入失败", timestampUTCms: 32); XCTFail("closed database") }
+        catch { XCTAssertEqual(error as? PersistenceError, .databaseClosed) }
+    }
+
     func testFailedDraftClearRollsBackInspirationInsert() throws {
         let directory = try TestTemporaryDirectory.make()
         defer { TestTemporaryDirectory.remove(directory) }

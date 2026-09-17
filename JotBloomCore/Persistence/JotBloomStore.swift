@@ -180,6 +180,15 @@ public final class JotBloomStore: @unchecked Sendable {
         }
     }
 
+    /// A separate entry point must not consume an unfinished input draft.
+    public func saveExternalInspiration(_ text: String, timestampUTCms: Int64) async throws -> Inspiration {
+        try PromptText.validate(text)
+        guard let parsed = InspirationTextParser.parse(text) else { throw PromptError.empty }
+        return try await performAsync {
+            try Self.saveManualInspiration(parsed, timestampUTCms: timestampUTCms, connection: $0, consumeDraft: false)
+        }
+    }
+
     public func listRecentInspirations(limit: Int = recentInspirationLimit) async throws -> [Inspiration] {
         try await performAsync {
             try Self.listRecentInspirations(limit: limit, connection: $0)
@@ -300,7 +309,8 @@ public final class JotBloomStore: @unchecked Sendable {
     private static func saveManualInspiration(
         _ parsed: ParsedInspiration,
         timestampUTCms: Int64,
-        connection: SQLiteConnection
+        connection: SQLiteConnection,
+        consumeDraft: Bool = true
     ) throws -> Inspiration {
         try connection.transaction {
             guard try duplicateInspiration(title: parsed.title, body: parsed.completeText, origin: "manual", connection: connection) == nil else { throw PromptError.duplicateInspiration }
@@ -330,12 +340,14 @@ public final class JotBloomStore: @unchecked Sendable {
 
             let identifier = try connection.lastInsertRowID()
 
-            let clearDraft = try connection.prepare(
-                "DELETE FROM drafts WHERE kind = ?",
-                operation: "clear_draft_after_save"
-            )
-            try clearDraft.bind(DraftKind.inspiration.rawValue, at: 1)
-            try clearDraft.executeDone()
+            if consumeDraft {
+                let clearDraft = try connection.prepare(
+                    "DELETE FROM drafts WHERE kind = ?",
+                    operation: "clear_draft_after_save"
+                )
+                try clearDraft.bind(DraftKind.inspiration.rawValue, at: 1)
+                try clearDraft.executeDone()
+            }
 
             let savedOrder = try connection.prepare("SELECT sort_order FROM inspirations WHERE id = ?", operation: "read_inserted_order")
             try savedOrder.bind(identifier, at: 1)

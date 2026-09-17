@@ -135,16 +135,21 @@ private final class HotZonePanel: NSPanel {
         isOpaque = false
         backgroundColor = .clear
         hasShadow = false
+        hidesOnDeactivate = false
         ignoresMouseEvents = false
         acceptsMouseMovedEvents = false
         level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 2)
         collectionBehavior = [.canJoinAllSpaces, .stationary]
         isReleasedWhenClosed = false
         contentView = clickView
+        if let customView = ApplicationExtensionHost.shared.module?.makeHotZoneView(onActivate: { [weak self] in self?.onActivate?() }) {
+            contentView = customView
+        }
     }
 
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
 }
 
 private final class HotZoneClickView: NSView {

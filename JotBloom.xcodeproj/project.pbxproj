@@ -93,6 +93,7 @@
 		5DD99DE144BDBD40386D784E /* InspirationLibraryRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51D149B8A280613447C58EB8 /* InspirationLibraryRow.swift */; };
 		5EDAA56BF58670F7D2325B47 /* ClipboardHistoryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE66D1102793BE05E519E780 /* ClipboardHistoryViewModel.swift */; };
 		6235A6567762D86F365824BC /* message-circle.svg in Resources */ = {isa = PBXBuildFile; fileRef = F1CAA019F192C040F90F8299 /* message-circle.svg */; };
+		64D49CDEC063DE097BB9BD58 /* ExternalInspirationWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67CF194A65D547ED5F6BC3E6 /* ExternalInspirationWriter.swift */; };
 		658379136DE23942FDDB5AEC /* ClipboardSourceSelector.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA3FBEF4544C5F26160D39E6 /* ClipboardSourceSelector.swift */; };
 		67850B42CDBD65B97DF56F2B /* ChatScrollMemory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79BCCD5EFABCCA9121318CE3 /* ChatScrollMemory.swift */; };
 		67C91E8C10E8600DF973C869 /* database.svg in Resources */ = {isa = PBXBuildFile; fileRef = 00B0D465E721ED5DF3E4473D /* database.svg */; };
@@ -326,6 +327,7 @@
 		664C73F13F15F7A8CBA5AFDA /* arrow-up.svg */ = {isa = PBXFileReference; path = "arrow-up.svg"; sourceTree = "<group>"; };
 		668A5D38C98FF10AE89409DB /* ClipboardImageNormalizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardImageNormalizer.swift; sourceTree = "<group>"; };
 		6763BF71EF8DF97B649E43B1 /* chevron-up.svg */ = {isa = PBXFileReference; path = "chevron-up.svg"; sourceTree = "<group>"; };
+		67CF194A65D547ED5F6BC3E6 /* ExternalInspirationWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExternalInspirationWriter.swift; sourceTree = "<group>"; };
 		67E657E1AA08F23CF791E963 /* ClipboardItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardItem.swift; sourceTree = "<group>"; };
 		68006FF7A1E805FB2586D300 /* JotBloomStore+Search.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "JotBloomStore+Search.swift"; sourceTree = "<group>"; };
 		6AC09463AF9414B81B87370F /* CoordinatedCredentialStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoordinatedCredentialStore.swift; sourceTree = "<group>"; };
@@ -512,6 +514,7 @@
 			isa = PBXGroup;
 			children = (
 				C2DEDCDD0A4CD588F174EFC5 /* ApplicationExtensionHost.swift */,
+				67CF194A65D547ED5F6BC3E6 /* ExternalInspirationWriter.swift */,
 			);
 			path = Extensions;
 			sourceTree = "<group>";
@@ -1087,6 +1090,7 @@
 				6B3C485C5250704EE5DEC0DA /* ClipboardHistoryRow.swift in Sources */,
 				7DCECE6397539F2E57969631 /* ClipboardHistoryView.swift in Sources */,
 				36F0F0320ED089ADE34414F9 /* ClipboardSourceApplicationProvider.swift in Sources */,
+				64D49CDEC063DE097BB9BD58 /* ExternalInspirationWriter.swift in Sources */,
 				70FB4EB70B1D88D4B02FF805 /* FullScreenDetector.swift in Sources */,
 				FB9905D662638FEDE8DE4EBF /* GlobalSearchRow.swift in Sources */,
 				B591DA0E471ABFFEA2FE1216 /* GlobalSearchView.swift in Sources */,

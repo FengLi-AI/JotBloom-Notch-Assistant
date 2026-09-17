@@ -10,6 +10,8 @@ struct ApplicationExtensionContext {
     let showPanel: () -> Void
     let hidePanel: () -> Void
     let showSettings: () -> Void
+    let canSaveInspiration: () -> Bool
+    let saveInspiration: (String) async throws -> Void
 }
 
 @MainActor
@@ -20,6 +22,11 @@ protocol ApplicationExtending: AnyObject {
     func start(context: ApplicationExtensionContext)
     func panelVisibilityDidChange(_ visible: Bool)
     func stop()
+    func makeHotZoneView(onActivate: @escaping () -> Void) -> NSView?
+}
+
+extension ApplicationExtending {
+    func makeHotZoneView(onActivate: @escaping () -> Void) -> NSView? { nil }
 }
 
 @MainActor
