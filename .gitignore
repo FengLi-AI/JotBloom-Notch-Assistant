@@ -24,3 +24,15 @@ artifacts/
 **/obj/
 **/__pycache__/
 *.exe
+
+# Commercial work and local archives belong outside this public repository.
+/商业拓展/
+/JotBloom-Extensions/
+/commercial/
+/private/
+/LicensingService/
+/小芽动态预览/
+/历史开发存档/
+*.pem
+*.key
+*.keystore

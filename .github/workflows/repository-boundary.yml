@@ -1,0 +1,38 @@
+name: Public repository boundary
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  boundary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check current public tree
+        run: python3 scripts/check-repository-boundary.py --tree HEAD
+      - name: Check each incoming commit
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            base="$PR_BASE"
+          elif [ "$EVENT_NAME" = "push" ]; then
+            base="$PUSH_BEFORE"
+          else
+            exit 0
+          fi
+          if git cat-file -e "$base^{commit}" 2>/dev/null; then
+            git rev-list "$base..HEAD" | while read -r commit; do
+              python3 scripts/check-repository-boundary.py --tree "$commit" || exit 1
+            done
+          fi
