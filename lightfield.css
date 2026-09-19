@@ -111,3 +111,5 @@ body>header:has(:focus-visible){transform:translateY(0);pointer-events:auto}
 main section[id]{scroll-margin-top:110px}
 @media(max-width:700px){body>header.experience-header nav>a[href="../#product"],body>header.experience-header nav>a[href="../#before"]{display:none}}
 @media(max-width:600px){body>header{padding-inline:24px}main section[id]{scroll-margin-top:94px}}
+
+.companion-greeting{display:block;margin:auto;padding:0;border:0;background:transparent;border-radius:12px;touch-action:pan-y}.companion-greeting canvas{display:block;image-rendering:pixelated}
