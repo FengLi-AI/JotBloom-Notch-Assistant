@@ -84,10 +84,11 @@
   mobile.addEventListener('change',fit);new ResizeObserver(fit).observe($('mini-scene'));fit();
   for(const name of ['detail','screen'])$('view-'+name).onclick=()=>{view=name;fit();for(const v of ['detail','screen'])$('view-'+v).setAttribute('aria-pressed',String(v===view));};
   function presence(resident){
-    api.action('resident',resident);resume();
+    api.action('resident',resident);$('backdrop-setting').hidden=resident;resume();
     $('presence-resident').setAttribute('aria-pressed',String(resident));$('presence-occasional').setAttribute('aria-pressed',String(!resident));
     text('presence-note',resident?'留在刘海旁，安静地陪你一会儿。':'偶尔出来走走，动作结束后回刘海里。点击下方动作，马上看一次。');
   }
+  $('pet-backdrop').onchange=()=>api.action('backdrop',$('pet-backdrop').checked);
   $('presence-resident').onclick=()=>presence(true);$('presence-occasional').onclick=()=>presence(false);
   const characterButtons=[],moodButtons=[];
   function drawThumb(canvas,id,mood='idle'){art.draw(canvas,id,art.poseAt(id,mood,3.6,true),3.6,{x:0,y:0},0,true);}
