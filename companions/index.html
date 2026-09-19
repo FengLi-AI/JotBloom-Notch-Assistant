@@ -1,17 +1,44 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark"><title>六位小伙伴 · 萌生 JotBloom</title><meta name="description" content="在网页上体验萌生六个像素小伙伴：选角色、看动作，演示拖入灵感和 Codex 完成提醒。Mac 版免费、MIT 开源。"><link rel="stylesheet" href="../lightfield.css?v=1.0.5-web2"><link rel="stylesheet" href="experience.css?v=1.0.5-web2"><script src="companion-engine.js?v=1.0.5" defer></script><script src="native-renderer.js?v=1.0.5" defer></script><script src="experience.js?v=1.0.5-web2" defer></script></head><body>
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark"><title>六位小伙伴 · 萌生 JotBloom</title><meta name="description" content="在网页上体验萌生六个像素小伙伴：选角色、看动作，演示拖入灵感和 Codex 完成提醒。Mac 版免费、MIT 开源。"><link rel="stylesheet" href="../lightfield.css?v=1.0.5-web3"><link rel="stylesheet" href="experience.css?v=1.0.5-web3"><script src="companion-engine.js?v=1.0.5" defer></script><script src="native-renderer.js?v=1.0.5" defer></script><script src="experience.js?v=1.0.5-web3" defer></script></head><body>
 <div class="lightfield" aria-hidden="true"><div class="field-sweep"></div><div class="field-ribbon"></div><div class="field-shade"></div><div class="grain"></div></div>
 <a class="skip" href="#playground">跳到小伙伴体验</a><header><a class="wordmark" href="../">萌生｜JotBloom</a><nav aria-label="主导航"><a href="../#product">产品功能</a><a href="../#before">下载须知</a><a href="https://github.com/FengLi-AI/JotBloom-Notch-Assistant" target="_blank" rel="noopener noreferrer">GitHub ↗</a></nav></header>
 <main class="companions-page">
-<section class="companions-intro"><p class="kicker">六位小伙伴 · 免费使用 · MIT 开源</p><h1>在刘海旁，陪你一会儿。</h1><p>点点它，交给它一段灵感，或等它捎来 Codex 的好消息。</p></section>
+<section class="companions-intro"><p class="kicker">六位小伙伴 · 免费使用 · MIT 开源</p><h1>在刘海旁，陪你一会儿。</h1><p>挑一个喜欢的小伙伴，看看它怎样陪伴、接住灵感，捎来新消息。</p></section>
 <section id="playground" class="playground" aria-label="小伙伴互动体验">
-  <div class="feature-tabs" role="tablist" aria-label="选择要体验的功能">
-    <button type="button" role="tab" id="tab-company" aria-selected="true" aria-controls="panel-company" tabindex="0" data-feature="company"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 10V3l5 4h4l5-4v7a8 8 0 1 1-14 0Z"/><path d="M9 13v1m6-1v1m-4 3h2"/></svg><span><strong>小伙伴陪伴</strong><small>选一位，看看它的小动作</small></span></button>
-    <button type="button" role="tab" id="tab-capture" aria-selected="false" aria-controls="panel-capture" tabindex="-1" data-feature="capture"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h4v4h8V4h4M12 19V12m-3 3 3-3 3 3M5 13v7h14v-7"/></svg><span><strong>拖入文字，存成灵感</strong><small>拖到刘海，松手就收好</small></span></button>
-    <button type="button" role="tab" id="tab-codex" aria-selected="false" aria-controls="panel-codex" tabindex="-1" data-feature="codex"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14v18H5zM8 7h8M8 11h5m-4 5 2 2 4-4"/></svg><span><strong>Codex 完成提醒</strong><small>后台忙完，递来一张纸条</small></span></button>
+ <div class="preview-heading"><div><h2>先认识一下。</h2><p>选一位，再点点它。每个小伙伴，都有自己的小动作。</p></div><button id="pause" type="button" class="quiet-button" aria-pressed="false">暂停动画</button></div>
+ <div class="character-bar"><div id="characters" class="character-picker" role="group" aria-label="选择小伙伴"></div><p id="character-note">垂垂 · 一只耳朵先下班</p></div>
+ <div class="preview-workspace">
+  <div class="companion-view">
+   <div class="viewbar"><span>放大观察</span><span id="touch-hint">点一下，看看它的回应</span></div>
+   <div id="hero-stage" class="hero-stage"><svg id="hero-scene" class="companion-scene" viewBox="605 0 180 88" xmlns="http://www.w3.org/2000/svg" role="group" aria-label="放大观察">
+ <defs><clipPath id="hero-clip"><rect id="hero-window" x="624.5" y="20" width="60.5" height="32"/></clipPath></defs>
+ <rect x="0" y="0" width="1510" height="20" fill="#2e2e2e"/>
+ <path id="hero-pocket" fill="#000"/>
+ <g clip-path="url(#hero-clip)"><foreignObject id="hero-position" x="628.5" y="20" width="40" height="32"><canvas xmlns="http://www.w3.org/1999/xhtml" id="hero-sprite" width="160" height="128" style="display:block;width:40px;height:32px" role="button" tabindex="0" aria-label="点点小伙伴，让它回应你"></canvas></foreignObject></g>
+ <path transform="translate(665.5 20)" fill="#2e2e2e" d="M0 0C1.65685 0 3 1.34315 3 3V23C3 27.9706 7.02944 32 12 32H167C171.971 32 176 27.9706 176 23V3C176 1.34315 177.343 0 179 0Z"/>
+ <circle cx="755" cy="25" r="3.8" fill="#101315" stroke="#46505a" stroke-width=".4"/><circle cx="755" cy="25" r="2.6" fill="#152734"/><circle cx="754.3" cy="24.4" r=".6" fill="#53778b" opacity=".5"/>
+ </svg><div class="hero-caption"><p id="pose-title">等你来</p><span id="pose-detail">轻轻呼吸，偶尔眨眨眼。</span></div></div>
+   <div class="actual"><div class="viewbar"><span>小尺寸效果</span><span>同一个动作，同步播放</span></div><div class="mini-screen"><svg id="mini-scene" class="companion-scene" viewBox="405 0 700 86" xmlns="http://www.w3.org/2000/svg" role="group" aria-label="小尺寸效果">
+ <defs><clipPath id="mini-clip"><rect id="mini-window" x="624.5" y="20" width="60.5" height="32"/></clipPath></defs>
+ <rect x="0" y="0" width="1510" height="20" fill="#2e2e2e"/>
+ <path id="mini-pocket" fill="#000"/>
+ <g clip-path="url(#mini-clip)"><foreignObject id="mini-position" x="628.5" y="20" width="40" height="32"><canvas xmlns="http://www.w3.org/1999/xhtml" id="mini-sprite" width="160" height="128" style="display:block;width:40px;height:32px" role="button" tabindex="0" aria-label="点点小伙伴，让它回应你"></canvas></foreignObject></g>
+ <path transform="translate(665.5 20)" fill="#2e2e2e" d="M0 0C1.65685 0 3 1.34315 3 3V23C3 27.9706 7.02944 32 12 32H167C171.971 32 176 27.9706 176 23V3C176 1.34315 177.343 0 179 0Z"/>
+ <circle cx="755" cy="25" r="3.8" fill="#101315" stroke="#46505a" stroke-width=".4"/><circle cx="755" cy="25" r="2.6" fill="#152734"/><circle cx="754.3" cy="24.4" r=".6" fill="#53778b" opacity=".5"/>
+ </svg></div></div>
   </div>
-  <div class="stage-toolbar"><span>Mac 屏幕顶部 <span class="toolbar-dot">·</span> 刘海局部放大</span><div><button id="backdrop" type="button" aria-pressed="false">切换深色壁纸</button><button id="pause" type="button" aria-pressed="false">暂停动画</button></div></div>
-  <div id="desktop" class="desktop">
-    <svg id="capture-svg" viewBox="505 10 500 125" role="group" xmlns="http://www.w3.org/2000/svg" aria-label="Mac 刘海交互体验">
+  <aside class="preview-controls" aria-label="动作与提醒设置">
+   <div class="control-section"><h3>怎么陪着你</h3><div class="presence-options" role="group" aria-label="出现方式"><button id="presence-resident" type="button" aria-pressed="true">一直陪着</button><button id="presence-occasional" type="button" aria-pressed="false">偶尔探头</button></div><p id="presence-note" class="control-note">留在刘海旁，安静地陪你一会儿。</p></div>
+   <div class="control-section"><h3>看看它的小动作</h3><div id="moods" class="mood-picker" role="group" aria-label="选择动作"></div></div>
+   <div class="control-section codex-controls"><h3>Codex 忙完，递张纸条</h3><p class="control-note">让它演示一次任务完成后的提醒。</p><div class="codex-options"><label><input id="codex-foreground" type="checkbox"> 我正在查看 Codex</label><button id="demo-notify" type="button" class="quiet-button">模拟完成 ↗</button></div><p id="codex-status" class="control-note" role="status">后台有结果时提醒，前台不打扰。</p><small>网页情景演示，不连接本机 Codex。</small></div>
+  </aside>
+ </div>
+ <p id="status" class="experience-status" role="status" aria-live="polite">垂垂在这里，陪你慢慢想。</p>
+</section>
+<section id="capture-section" class="capture-section" aria-labelledby="capture-title">
+ <div class="preview-heading"><div><p class="kicker">拖入刘海 · 留住灵感</p><h2 id="capture-title">把想法，轻轻交给它。</h2><p>把一段文字拖到刘海，出现提示后松手。它会收好，再回应你。</p></div><button id="demo-capture" type="button" class="primary-button">播放完整过程 ↗</button></div>
+ <div class="capture-input-row"><div class="source-note"><div class="source-heading"><label for="capture-source-text">可以修改，也可以拖入自己选中的文字</label><button id="capture-drag-handle" type="button" draggable="true" aria-label="拖动这段文字到刘海">拖动这段文字</button></div><textarea id="capture-source-text" rows="2" maxlength="2000">把零散的想法，做成一个小作品。</textarea></div><div class="saved-note"><span>刚刚收录 <b id="capture-count">0</b></span><p id="saved-text">等一个闪过的想法。</p></div></div>
+ <div class="capture-toolbar"><span id="capture-character">垂垂帮你接着</span><div class="view-switch" role="group" aria-label="预览视角"><button id="view-detail" type="button" aria-pressed="true">刘海特写</button><button id="view-screen" type="button" aria-pressed="false">整屏比例</button></div></div>
+ <div id="desktop" class="capture-desktop">    <svg id="capture-svg" viewBox="505 0 500 170" role="group" xmlns="http://www.w3.org/2000/svg" aria-label="Mac 刘海交互体验">
       <defs>
         <linearGradient id="wallpaper" x1="0" y1="0" x2=".85" y2="1"><stop stop-color="#639bc8"/><stop offset=".56" stop-color="#9cc9dc"/><stop offset="1" stop-color="#dde8e5"/></linearGradient>
         <linearGradient id="night-wallpaper" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#122942"/><stop offset=".6" stop-color="#304c76"/><stop offset="1" stop-color="#536987"/></linearGradient>
@@ -28,33 +55,17 @@
       <g id="capture-ripples" fill="none" stroke="#b2d5ef" pointer-events="none"><path id="capture-ripple-a"/><path id="capture-ripple-b"/></g>
       <path id="capture-liquid" fill="#08090b" opacity="0" pointer-events="none"/>
       <g clip-path="url(#capture-liquid-clip)" pointer-events="none"><g id="capture-liquid-label" opacity="0"><text id="capture-liquid-text" x="755" y="63.5" text-anchor="middle" font-size="9" fill="#e5e8ed">松手即可收录灵感</text></g></g>
-      <g clip-path="url(#capture-pet-clip)"><foreignObject id="pet-position" x="628.5" y="20" width="40" height="32"><canvas xmlns="http://www.w3.org/1999/xhtml" id="walker" width="160" height="128" role="button" tabindex="0" aria-label="点点小伙伴，让它回应你"></canvas></foreignObject></g>
+      <path id="capture-pocket" fill="#000"/><g clip-path="url(#capture-pet-clip)"><foreignObject id="pet-position" x="628.5" y="20" width="40" height="32"><canvas xmlns="http://www.w3.org/1999/xhtml" id="walker" width="160" height="128" role="button" tabindex="0" aria-label="点点小伙伴，让它回应你"></canvas></foreignObject></g>
       <foreignObject x="659.5" y="20" width="191" height="50" pointer-events="none"><canvas xmlns="http://www.w3.org/1999/xhtml" id="capture-rim" width="764" height="200" style="display:block;width:191px;height:50px" aria-hidden="true"></canvas></foreignObject>
       <path transform="translate(665.5 20)" fill="#242629" d="M0 0C1.65685 0 3 1.34315 3 3V23C3 27.9706 7.02944 32 12 32H167C171.971 32 176 27.9706 176 23V3C176 1.34315 177.343 0 179 0Z"/>
       <circle cx="755" cy="25" r="3.8" fill="#101315" stroke="#333a3e" stroke-width=".4"/><circle cx="755" cy="25" r="2.9" fill="url(#camera-glass)"/><circle cx="754.3" cy="24.4" r=".6" fill="#53778b" opacity=".5"/>
       <g id="capture-flying-note" opacity="0" pointer-events="none"><rect x="-29" y="-8" width="58" height="16" rx="4" fill="#f3c76a"/><text x="0" y="2.5" text-anchor="middle" font-size="7" fill="#624820">一段灵感</text></g>
-      <rect id="notch" x="665.5" y="20" width="179" height="32" fill="transparent" role="button" tabindex="0" aria-label="刘海：拖入文字，或点击查看灵感" aria-expanded="false"/>
-      <foreignObject id="mock-panel" x="645" y="52" width="220" height="108" aria-hidden="true" style="display:none"><div xmlns="http://www.w3.org/1999/xhtml" class="library-popover"><div class="library-heading"><strong>灵感库</strong><button id="close-panel" type="button" aria-label="收起灵感库">×</button></div><p id="empty-library">拖一段文字进来，留住刚才的想法。</p><ul id="demo-library"></ul><small>网页暂存 · 刷新后清空</small></div></foreignObject>
-    </svg>
-    <div class="stage-hint" id="stage-hint">点点刘海左边的小伙伴，它会回应你。</div>
-  </div>
-  <div class="stage-status"><span class="status-dot" aria-hidden="true"></span><p id="status" role="status" aria-live="polite">垂垂在这里，陪你慢慢想。</p></div>
-  <div class="character-bar"><span class="control-label">陪你的是</span><div id="characters" class="character-picker" role="group" aria-label="选择小伙伴"></div></div>
-  <div class="feature-panel" id="panel-company" role="tabpanel" aria-labelledby="tab-company">
-    <div class="feature-copy"><h2>它不说话，也有自己的小情绪。</h2><p>平时安静地陪着你。点一点，会歪头回应；打开刘海面板时，会先跑回去给你让位置。</p></div>
-    <div class="feature-actions"><p class="control-label">想看它做什么？</p><div id="moods" class="mood-picker" role="group" aria-label="选择动作"></div></div>
-  </div>
-  <div class="feature-panel" id="panel-capture" role="tabpanel" aria-labelledby="tab-capture" hidden>
-    <div class="feature-copy"><h2>想法闪过，顺手留下。</h2><p>把右边这段文字拖到上方刘海，出现提示后松手。刘海会收好文字，小伙伴再接住这点灵感。</p><button type="button" id="show-library" class="text-action">查看刚刚收录的灵感 <span id="capture-count">0</span> ↗</button><small>本页暂存，刷新清空。Mac 客户端会保存到灵感库。</small></div>
-    <div class="feature-actions"><div class="source-note"><div class="source-heading"><label for="capture-source-text">写一句想留下的话</label><button id="capture-drag-handle" type="button" draggable="true" aria-label="拖动这段文字到刘海">拖到刘海 ↑</button></div><textarea id="capture-source-text" rows="2" maxlength="2000">把零散的想法，做成一个小作品。</textarea></div><button type="button" id="demo-capture" class="action-button">播放一次拖入过程 <span aria-hidden="true">↗</span></button></div>
-  </div>
-  <div class="feature-panel" id="panel-codex" role="tabpanel" aria-labelledby="tab-codex" hidden>
-    <div class="feature-copy"><h2>你先忙，完成了它会告诉你。</h2><p>让 Codex 在后台工作。任务完成，小伙伴会举起纸条；如果你正在查看 Codex，它就安静待着。</p><small>这里是情景演示，不连接你的 Codex。</small></div>
-    <div class="feature-actions"><div class="codex-task"><div class="task-heading"><span class="task-mark" aria-hidden="true">›_</span><strong>Codex</strong><span id="task-state">等待演示</span></div><p id="task-detail">帮我整理今天的灵感，生成一份摘要。</p><div class="task-progress"><span id="task-progress"></span></div></div><div class="codex-options"><label><input id="codex-foreground" type="checkbox"> 我正在查看 Codex</label><button type="button" id="demo-notify" class="action-button">模拟任务完成 ↗</button></div></div>
-  </div>
-  <div id="capture-drag-ghost" aria-hidden="true">一段灵感</div>
+      <rect id="notch" x="665.5" y="20" width="179" height="32" fill="transparent" aria-label="把文字拖入这片刘海区域"/>
+
+    </svg></div>
+ <div class="capture-caption"><p id="capture-status" role="status" aria-live="polite">把文字拖到顶部刘海本体，我接着。</p><span>本页暂存 · 刷新清空</span></div>
+ <div id="capture-drag-ghost" aria-hidden="true">一段灵感</div>
 </section>
-<section class="companion-explanation"><article><p class="kicker">一点陪伴</p><h2>它有自己的小动作。</h2><p>歪头、打盹、伸个懒腰，也会开心地晃一晃。你打开萌生时，它会先跑回刘海里，把位置让出来。</p></article><article><p class="kicker">一点顺手</p><h2>文字拖过来，灵感留下来。</h2><p>Mac 客户端里，选中文字，拖入刘海区域松手，原文就存进灵感库。网页中可以先用上面的文字试一试。</p></article><article><p class="kicker">一点提醒</p><h2>它忙完了，叫你一声。</h2><p>开启本机 Codex 后台完成提醒后，小伙伴会在任务完成时递纸条。Codex 所在应用在前台时不打扰。</p></article></section>
 <section class="experience-download"><h2>带一位，回你的屏幕旁。</h2><p>六个角色和这些功能全部免费，无需购买或激活。</p><a class="pill" href="https://github.com/FengLi-AI/JotBloom-Notch-Assistant/releases/download/v1.0.5/JotBloom-1.0.5-universal.dmg">下载 Mac 1.0.5 ↗</a><p class="experience-footnote">实际桌宠、刘海拖入及纸条提醒需要带内置刘海屏的 Mac。Windows 仍为 1.0.4 测试版，暂未包含这些功能。<br>网页演示不连接 Codex，也不读取本机文件；拖入内容只在当前页面暂存。Mac 安装包为 ad-hoc 签名，尚未经过 Apple 公证。</p><a class="text-link" href="../#before">查看完整安装说明 ↗</a></section>
 <footer class="experience-footer"><a href="../">← 回到萌生官网</a><span>给闪过的想法，一点空间。</span><a href="https://github.com/FengLi-AI/JotBloom-Notch-Assistant/releases/tag/v1.0.5">本次更新 ↗</a></footer>
 </main></body></html>
