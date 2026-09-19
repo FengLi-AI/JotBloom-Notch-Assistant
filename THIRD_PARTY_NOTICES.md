@@ -10,3 +10,5 @@ Mac 源码为 Swift / SwiftUI / AppKit 工程，使用系统 SQLite。Windows �
 本项目自身代码适用根目录 LICENSE。若发现署名或资源授权遗漏，请联系作者处理。
 
 Windows 分发包含 .NET / Windows Desktop Runtime 10.0.12（MIT）、Microsoft.Data.Sqlite 10.0.12（MIT）、SQLitePCLRaw 2.1.12（Apache-2.0）及 SQLite（公有领域）。许可证原文及第三方声明随安装包提供，亦见 [Windows/licenses](Windows/licenses/)。
+
+六个像素小伙伴（垂垂、云团、嘟角、墨墨、栗栗、暮暮）、动作绘制及网页演示桌面为本项目原创，随源码按 MIT 许可发布。Mac 动画运行时使用系统 JavaScriptCore；官网不打包内部参考壁纸或 Figma 素材。

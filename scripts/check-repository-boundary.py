@@ -13,7 +13,7 @@ def violations(paths):
         '商业拓展', 'jotbloom-extensions', 'commercial', 'private',
         'licensingservice', '小芽动态预览', 'companion-preview', '历史开发存档',
     }
-    private_names = {'companion-engine.js', '交互逻辑验证.cjs', '.gitmodules'}
+    private_names = {'交互逻辑验证.cjs', '.gitmodules'}
     sensitive_suffixes = {'.pem', '.key', '.p12', '.pfx', '.keystore', '.sqlite', '.db'}
     for path in paths:
         p = PurePosixPath(path)

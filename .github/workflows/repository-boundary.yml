@@ -18,6 +18,10 @@ jobs:
           fetch-depth: 0
       - name: Check current public tree
         run: python3 scripts/check-repository-boundary.py --tree HEAD
+      - name: Verify shared companion resources
+        run: python3 scripts/sync-companion-web.py --check
+      - name: Check all six companion animations
+        run: node --test scripts/check-native-art.cjs
       - name: Check each incoming commit
         env:
           EVENT_NAME: ${{ github.event_name }}
