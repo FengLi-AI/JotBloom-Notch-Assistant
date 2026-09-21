@@ -96,7 +96,7 @@ xcodebuild -project JotBloom.xcodeproj -scheme JotBloom -destination 'platform=m
 - 微信：feNgL1999_
 - 电话：+86 18580676433
 - 小红书：[FengLiAi](https://www.xiaohongshu.com/user/profile/69b6dd97000000003303a64d)
-- 抖音号：N24642464（在抖音内搜索）
+- 抖音号：feNgL3（在抖音内搜索）
 
 欢迎家人们下载体验，帮我点点 Star。遇到 Bug，或者有更好的建议，欢迎提交 Issue、发邮件或私信我，感谢大家支持！
 
