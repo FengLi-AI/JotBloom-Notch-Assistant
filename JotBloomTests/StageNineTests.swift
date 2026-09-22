@@ -175,7 +175,7 @@ final class StageNineTests: XCTestCase {
             try db.execute("INSERT INTO inspirations(id,title,body,category,category_source,created_at_utc_ms,updated_at_utc_ms,source,sort_order) VALUES(42,'旧首行','旧正文','文章类','user',1,2,'manual',77); INSERT INTO chat_sessions(slot,token,updated_at_utc_ms,title) VALUES(1,'old-session',3,'已有草稿'); INSERT INTO drafts(kind,content,updated_at_utc_ms) VALUES('ai_chat','旧草稿',3);", operation: "seed_v6")
         }
         let upgraded = try JotBloomStore(dataDirectoryURL: oldDir); defer { upgraded.close() }
-        XCTAssertEqual(try upgraded.schemaVersionSynchronously(), 7)
+        XCTAssertEqual(try upgraded.schemaVersionSynchronously(), DatabaseMigrator.currentVersion)
         let record = try upgraded.inspirationSynchronously(id: 42)
         XCTAssertEqual(record.body, "旧首行\n旧正文"); XCTAssertEqual(record.categorySource, .user); XCTAssertEqual(record.sortOrder, 77)
         XCTAssertEqual(record.updatedAtUTCms, 2)

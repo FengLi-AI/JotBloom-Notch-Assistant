@@ -29,7 +29,7 @@ final class JotBloomStoreTests: XCTestCase {
         let store = try JotBloomStore(dataDirectoryURL: directory)
         defer { store.close() }
 
-        XCTAssertEqual(try store.schemaVersionSynchronously(), 7)
+        XCTAssertEqual(try store.schemaVersionSynchronously(), DatabaseMigrator.currentVersion)
         XCTAssertEqual(store.dataDirectoryURL, directory.standardizedFileURL)
         XCTAssertTrue(FileManager.default.fileExists(atPath: store.databaseURL.path))
         XCTAssertTrue(

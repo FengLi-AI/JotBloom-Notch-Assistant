@@ -110,6 +110,7 @@ final class SettingsViewModel: ObservableObject {
             try await login.setEnabled(enabled)
         }
     }
+    func setFileShelfEnabled(_ enabled: Bool) { value.fileShelfEnabled = enabled; persist() }
     func setMenuVisible(_ visible: Bool) {
         guard !busy else { return }
         guard onMenuVisibility?(visible) == true else { feedback = "唤起快捷键不可用，暂时不能隐藏菜单栏入口。"; return }

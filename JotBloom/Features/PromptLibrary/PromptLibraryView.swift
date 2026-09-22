@@ -145,7 +145,7 @@ struct PromptLibraryView: View {
                         Spacer(minLength: 0)
                     }.padding(.horizontal, 10).padding(.top, 8).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                         .contentShape(Rectangle())
-                }.buttonStyle(.plain).disabled(model.busy)
+                }.buttonStyle(BloomLibraryPressStyle()).disabled(model.busy)
             }
             HStack(spacing: 2) {
                 BloomDragHandle(id: prompt.id, drag: libraryDrag) { model.move($0, relativeTo: $1, after: $2) }.disabled(model.busy)
@@ -162,7 +162,7 @@ struct PromptLibraryView: View {
                 }.disabled(model.busy)
             }.frame(height: 24).padding(.horizontal, 8).padding(.bottom, 5)
         }.foregroundStyle(BloomTheme.muted).frame(height: layout.cardHeight)
-            .modifier(BloomLibraryCard(selected: model.selectedID == prompt.id, hovered: hoveredPromptID == prompt.id))
+            .modifier(BloomLibraryCard(selected: model.selectedID == prompt.id, hovered: hoveredPromptID == prompt.id, selectionStyle: .interaction))
             .onHover { hoveredPromptID = $0 ? prompt.id : nil }
             .accessibilityElement(children: .contain)
             .accessibilityAddTraits(model.selectedID == prompt.id ? [.isSelected] : [])

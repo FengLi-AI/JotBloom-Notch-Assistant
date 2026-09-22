@@ -6,12 +6,13 @@ import JotBloomCore
 @MainActor
 final class NotchDropView: NSView {
     weak var capture: NotchCaptureController?
+    weak var fileShelf: FileShelfDragController?
     var onActivate: (() -> Void)?
     private var sequence: Int?
     private var cachedText: String?
     override init(frame: NSRect) {
         super.init(frame: frame)
-        registerForDraggedTypes([.string, NSPasteboard.PasteboardType("public.utf8-plain-text")])
+        registerForDraggedTypes([.fileURL, .string, NSPasteboard.PasteboardType("public.utf8-plain-text")])
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
@@ -19,7 +20,8 @@ final class NotchDropView: NSView {
         if HotZoneClickPolicy.shouldActivate(buttonNumber: event.buttonNumber, clickCount: event.clickCount) { onActivate?() }
     }
     func text(from board: NSPasteboard) -> String? {
-        guard board.types?.contains(.fileURL) != true,
+        let promisedTypes = NSFilePromiseReceiver.readableDraggedTypes.map { NSPasteboard.PasteboardType($0) }
+        guard board.types?.contains(where: { $0 == .fileURL || promisedTypes.contains($0) || $0.rawValue == "NSFilenamesPboardType" }) != true,
               let text = board.string(forType: .string) ?? board.string(forType: .init("public.utf8-plain-text")),
               !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         return text
@@ -32,17 +34,28 @@ final class NotchDropView: NSView {
     }
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation { draggingUpdated(sender) }
     override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        if sender.draggingPasteboard.types?.contains(.fileURL) == true {
+            capture?.leave()
+            guard sender.draggingSourceOperationMask.contains(.copy),
+                  fileShelf?.enter(sender, notchFrame: window?.frame ?? .zero) == true else { return [] }
+            return .copy
+        }
         guard accepts(sender) else { capture?.leave(); return [] }
         capture?.hover(); return .copy
     }
-    override func draggingExited(_ sender: NSDraggingInfo?) { capture?.leave(); sequence = nil; cachedText = nil }
-    override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool { accepts(sender) }
+    override func draggingExited(_ sender: NSDraggingInfo?) { fileShelf?.leaveNotch(); capture?.leave(); sequence = nil; cachedText = nil }
+    override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        sender.draggingPasteboard.types?.contains(.fileURL) == true ? fileShelf?.canReceive == true : accepts(sender)
+    }
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        if sender.draggingPasteboard.types?.contains(.fileURL) == true {
+            return fileShelf?.accept(sender, before: nil, fromNotch: true) == true
+        }
         guard accepts(sender), let text = cachedText else { return false }
         return capture?.accept(text, sequence: sender.draggingSequenceNumber) == true
     }
     override func concludeDragOperation(_ sender: NSDraggingInfo?) { capture?.leave(); sequence = nil; cachedText = nil }
-    override func draggingEnded(_ sender: NSDraggingInfo) { capture?.leave(); sequence = nil; cachedText = nil }
+    override func draggingEnded(_ sender: NSDraggingInfo) { fileShelf?.cancel(); capture?.leave(); sequence = nil; cachedText = nil }
 }
 
 @MainActor
@@ -58,6 +71,9 @@ final class NotchCaptureController {
     var received: () -> Void = {}
     var hovering: (Bool) -> Void = { _ in }
     var statusChanged: (String?) -> Void = { _ in }
+    var hoverLabel = "松手即可收录灵感"
+    var successLabel = "已收录到灵感库"
+    var failureLabel: ((Error) -> String)?
     private(set) var phase: NotchFeedbackPhase = .idle
     private(set) var pending = 0
     private var successes = 0
@@ -84,15 +100,19 @@ final class NotchCaptureController {
     }
     @discardableResult
     func accept(_ text: String, sequence: Int) -> Bool {
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        let write = save
+        return acceptOperation(sequence: sequence) { try await write(text) }
+    }
+    @discardableResult
+    func acceptOperation(sequence: Int, operation: @escaping () async throws -> Void) -> Bool {
         guard canReceive else { return false }
         if sequences.contains(sequence) { return true }
-        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
         sequences.append(sequence); if sequences.count > 64 { sequences.removeFirst() }
         if pending == 0 && [.idle, .hover, .cancel, .failure].contains(phase) { successes = 0; failure = nil }
         pending += 1; dismissed = false; hovering(false); reserve(); enter(.ack)
-        let write = save
         Task { [weak self] in
-            do { try await write(text); self?.saved(error: nil) }
+            do { try await operation(); self?.saved(error: nil) }
             catch { self?.saved(error: error) }
         }
         return true
@@ -100,12 +120,12 @@ final class NotchCaptureController {
     private func saved(error: Error?) {
         pending = max(0, pending - 1)
         if let error {
-            failure = (error as? PromptError) == .duplicateInspiration ? "这条灵感已收录" : "未能收录，请重试"
+            failure = failureLabel?(error) ?? ((error as? PromptError) == .duplicateInspiration ? "这条灵感已收录" : "未能收录，请重试")
             statusChanged((error as? PromptError) == .duplicateInspiration ? "这条灵感已在库中，无需重复收录。" : "拖入收录失败：" + error.localizedDescription)
-        } else { successes += 1; if failure == nil { statusChanged("已收录到灵感库") } }
+        } else { successes += 1; if failure == nil { statusChanged(successLabel) } }
         guard !stopped else { return }
         if !presentationAllowed || !enabled || dismissed { finish(notify: !dismissed) }
-        else if timer == nil { enter(.ack) }
+        else if pending == 0 { enter(.ack) }
     }
     func conceal() {
         hovering(false); timer?.invalidate(); timer = nil
@@ -167,7 +187,7 @@ final class NotchCaptureController {
     private func paint() {
         feedback.stage.phase = phase; feedback.stage.elapsed = elapsed
         feedback.stage.expansion = height; feedback.stage.reduced = reduced
-        feedback.stage.label = phase == .failure ? (failure ?? "未能收录，请重试") : phase == .ack || phase == .absorb ? "收到，正在收录" : "松手即可收录灵感"
+        feedback.stage.label = phase == .failure ? (failure ?? "未能收录，请重试") : phase == .ack || phase == .absorb ? (pending == 0 && failure == nil ? successLabel : "收到，正在收录") : hoverLabel
         feedback.stage.needsDisplay = true
     }
 }

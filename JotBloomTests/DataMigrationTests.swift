@@ -21,7 +21,7 @@ final class InitialDataDirectorySetupTests: XCTestCase {
         XCTAssertFalse(try InitialDataDirectorySetup().needsSelection(location: location))
         XCTAssertFalse(FileManager.default.fileExists(atPath: control.appendingPathComponent("jotbloom.sqlite").path))
         let store = try JotBloomStore(dataDirectoryURL: target, requireExisting: true); defer { store.close() }
-        XCTAssertEqual(try store.schemaVersionSynchronously(), 7)
+        XCTAssertEqual(try store.schemaVersionSynchronously(), DatabaseMigrator.currentVersion)
         XCTAssertTrue(try store.listRecentInspirationsSynchronously().isEmpty)
     }
 

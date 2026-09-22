@@ -76,7 +76,7 @@ final class ChatTests: XCTestCase {
         try db.execute("INSERT INTO drafts(kind,content,updated_at_utc_ms) VALUES('ai_chat','升级前草稿',1)", operation: "fixture")
         db.close()
         let upgraded = try JotBloomStore(dataDirectoryURL: oldDirectory); defer { upgraded.close() }
-        XCTAssertEqual(try upgraded.schemaVersionSynchronously(), 7)
+        XCTAssertEqual(try upgraded.schemaVersionSynchronously(), DatabaseMigrator.currentVersion)
         XCTAssertEqual(try upgraded.loadDraftSynchronously(kind: .aiChat)?.content, "升级前草稿")
         let backup = try SQLiteConnection(databaseURL: url.appendingPathExtension("bak-v4"), readOnly: true); defer { backup.close() }
         XCTAssertEqual(try backup.userVersion(), 4)
@@ -211,7 +211,7 @@ final class ChatTests: XCTestCase {
         db.close()
         let upgraded = try JotBloomStore(dataDirectoryURL: root); defer { upgraded.close() }
         let page = try await upgraded.chatPage()
-        XCTAssertEqual(try upgraded.schemaVersionSynchronously(), 7)
+        XCTAssertEqual(try upgraded.schemaVersionSynchronously(), DatabaseMigrator.currentVersion)
         XCTAssertEqual(page.turns.first?.id, 41); XCTAssertEqual(page.turns.first?.session, "old-session")
         XCTAssertEqual(page.turns.first?.answer, "原完整回答")
         XCTAssertEqual(try upgraded.loadDraftSynchronously(kind: .aiChat)?.content, "旧草稿")

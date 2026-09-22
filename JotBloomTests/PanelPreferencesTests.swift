@@ -2,11 +2,43 @@ import XCTest
 @testable import JotBloomCore
 
 final class PanelPreferencesTests: XCTestCase {
+    func testDefaultOrderKeepsSearchOutsideBusinessTabs() {
+        XCTAssertEqual(PanelPreferences().order,
+                       [.inspiration, .inspirationLibrary, .clipboard, .prompts, .fileShelf, .chat])
+        var value = PanelPreferences()
+        value.move(.globalSearch, by: -1)
+        XCTAssertEqual(value.order, PanelSlot.navigationSlots)
+    }
+
+    func testOldDefaultMigratesButCustomAndNewlySavedOrdersSurvive() throws {
+        let suite = "JotBloomTests.NavigationMigration.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = PanelPreferencesStore(defaults: defaults)
+        let oldDefault: [PanelSlot] = [.inspiration, .clipboard, .prompts, .inspirationLibrary, .chat, .fileShelf]
+        for lastSlot in [PanelSlot.globalSearch, .fileShelf] {
+            defaults.set(["order": (Array(oldDefault.dropLast()) + [lastSlot]).map(\.rawValue),
+                          "default": "clipboard", "appearance": "light", "reduceMotion": true],
+                         forKey: "jotbloom.panel.preferences.v1")
+            let migrated = store.load()
+            XCTAssertEqual(migrated.order, PanelSlot.navigationSlots)
+            XCTAssertEqual(migrated.defaultSlot, .clipboard)
+            XCTAssertEqual(migrated.appearance, .light)
+            XCTAssertTrue(migrated.reduceMotion)
+        }
+        let custom = Array(oldDefault.reversed())
+        defaults.set(["order": custom.map(\.rawValue)], forKey: "jotbloom.panel.preferences.v1")
+        XCTAssertEqual(store.load().order, custom)
+        // A user deliberately recreating the former arrangement must not be migrated again.
+        store.save(PanelPreferences(order: oldDefault))
+        XCTAssertEqual(store.load().order, oldDefault)
+    }
+
     func testNormalizesMissingAndDuplicateSlots() {
         let value = PanelPreferences(order: [.clipboard, .clipboard])
         XCTAssertEqual(value.order.first, .clipboard)
         XCTAssertEqual(value.order.count, 6)
-        XCTAssertEqual(Set(value.order), Set(PanelSlot.allCases))
+        XCTAssertEqual(Set(value.order), Set(PanelSlot.navigationSlots))
     }
 
     func testChatAndOtherReleasedSlotsCanBeDefault() {
@@ -21,12 +53,12 @@ final class PanelPreferencesTests: XCTestCase {
     func testMovingPreservesAllSlotsAndChecksBoundaries() {
         var value = PanelPreferences()
         value.move(.inspiration, by: -1)
-        XCTAssertEqual(value.order, PanelSlot.allCases)
-        value.move(.globalSearch, by: 1)
-        XCTAssertEqual(value.order, PanelSlot.allCases)
-        value.move(.clipboard, by: -1)
-        XCTAssertEqual(value.order.first, .clipboard)
-        XCTAssertEqual(Set(value.order), Set(PanelSlot.allCases))
+        XCTAssertEqual(value.order, PanelSlot.navigationSlots)
+        value.move(.chat, by: 1)
+        XCTAssertEqual(value.order, PanelSlot.navigationSlots)
+        value.move(.inspirationLibrary, by: -1)
+        XCTAssertEqual(value.order.first, .inspirationLibrary)
+        XCTAssertEqual(Set(value.order), Set(PanelSlot.navigationSlots))
     }
 
     func testPreferencesRoundTripWithoutTouchingStandardDefaults() throws {
@@ -36,7 +68,7 @@ final class PanelPreferencesTests: XCTestCase {
         let store = PanelPreferencesStore(defaults: defaults)
         XCTAssertEqual(store.load(), PanelPreferences())
         var value = PanelPreferences(defaultSlot: .inspirationLibrary, reduceMotion: true, appearance: .light)
-        value.move(.globalSearch, by: -1)
+        value.move(.fileShelf, by: -1)
         store.save(value)
         XCTAssertEqual(PanelPreferencesStore(defaults: defaults).load(), value)
     }

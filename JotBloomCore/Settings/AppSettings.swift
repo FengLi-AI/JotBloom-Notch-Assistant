@@ -33,6 +33,7 @@ public struct AppSettings: Equatable, Sendable {
     public var shortcut = Shortcut.standard
     public var showMenuBarIcon = true
     public var monitoringEnabled = true
+    public var fileShelfEnabled = true
     public var maximumCount = 200
     public var maximumDays = 0
     public var maximumBytes: Int64 = 2_000_000_000
@@ -68,6 +69,7 @@ public struct AppSettingsStore {
         if let data = d["shortcut"] as? Data, let shortcut = try? JSONDecoder().decode(Shortcut.self, from: data), shortcut.isValid { value.shortcut = shortcut }
         value.showMenuBarIcon = d["showMenuBarIcon"] as? Bool ?? true
         value.monitoringEnabled = d["monitoringEnabled"] as? Bool ?? true
+        value.fileShelfEnabled = d["fileShelfEnabled"] as? Bool ?? true
         value.onboardingSeen = d["onboardingSeen"] as? Bool ?? false
         if let count = d["maximumCount"] as? Int, AppSettings.countOptions.contains(count) { value.maximumCount = count }
         if let days = d["maximumDays"] as? Int, AppSettings.dayOptions.contains(days) { value.maximumDays = days }
@@ -85,7 +87,7 @@ public struct AppSettingsStore {
     public func save(_ value: AppSettings) {
         defaults.set(["version": 1, "shortcut": (try? JSONEncoder().encode(value.shortcut)) ?? Data(),
                       "showMenuBarIcon": value.showMenuBarIcon, "monitoringEnabled": value.monitoringEnabled,
-                      "onboardingSeen": value.onboardingSeen, "maximumCount": value.maximumCount,
+                      "fileShelfEnabled": value.fileShelfEnabled, "onboardingSeen": value.onboardingSeen, "maximumCount": value.maximumCount,
                       "maximumDays": value.maximumDays, "maximumBytes": value.maximumBytes,
                       "mainURL": value.main.baseURL, "mainModel": value.main.model,
                       "auxURL": value.auxiliary.baseURL, "auxModel": value.auxiliary.model,

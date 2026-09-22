@@ -11,6 +11,7 @@ final class HotZoneWindowController {
     private var windows: [HotZonePanel] = []
     private var panelVisible = false
     private var started = false
+    var fileShelf: FileShelfDragController?
 
 #if DEBUG
     var debugWindowCount: Int { windows.count }
@@ -64,6 +65,7 @@ final class HotZoneWindowController {
     func stop() {
         guard started else { return }
         started = false
+        fileShelf?.stop()
 
         let workspaceCenter = NSWorkspace.shared.notificationCenter
         for token in observerTokens {
@@ -76,7 +78,8 @@ final class HotZoneWindowController {
 
     func setPanelVisible(_ isVisible: Bool) {
         panelVisible = isVisible
-        refresh()
+        // Keep the original destination window alive until the mouse is released.
+        if fileShelf?.active != true { refresh() }
     }
 
     private func scheduleRefresh() {
@@ -85,9 +88,10 @@ final class HotZoneWindowController {
         }
     }
 
-    private func refresh() {
+    func refresh() {
         guard started else { return }
 
+        if fileShelf?.active == true { return }
         let fullScreenState = fullScreenDetector.currentState()
         closeWindows()
         windows = NSScreen.screens.compactMap { screen in
@@ -101,7 +105,7 @@ final class HotZoneWindowController {
                 return nil
             }
 
-            let window = HotZonePanel(frame: PanelGeometry.hotZoneFrame(for: metrics))
+            let window = HotZonePanel(frame: PanelGeometry.hotZoneFrame(for: metrics), fileShelf: fileShelf)
             window.onActivate = onActivate
             window.orderFrontRegardless()
             return window
@@ -124,7 +128,7 @@ private final class HotZonePanel: NSPanel {
 
     private let clickView = HotZoneClickView(frame: .zero)
 
-    init(frame: CGRect) {
+    init(frame: CGRect, fileShelf: FileShelfDragController?) {
         super.init(
             contentRect: frame,
             styleMask: [.borderless, .nonactivatingPanel],
@@ -144,6 +148,12 @@ private final class HotZonePanel: NSPanel {
         contentView = clickView
         if let customView = ApplicationExtensionHost.shared.module?.makeHotZoneView(onActivate: { [weak self] in self?.onActivate?() }) {
             contentView = customView
+        }
+        if let drop = contentView as? NotchDropView { drop.fileShelf = fileShelf }
+        else {
+            let drop = NotchDropView(frame: .zero)
+            drop.fileShelf = fileShelf; drop.onActivate = { [weak self] in self?.onActivate?() }
+            contentView = drop
         }
     }
 

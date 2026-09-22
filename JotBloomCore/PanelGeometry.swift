@@ -123,7 +123,7 @@ public enum PanelGeometry {
 
 /// Uses the actual content proposal, not the screen scale, so rows remain complete.
 public struct LibraryLayoutMetrics: Equatable {
-    public enum ContentKind: CaseIterable, Hashable { case clipboard, prompts, inspirations }
+    public enum ContentKind: CaseIterable, Hashable { case clipboard, prompts, inspirations, files }
     public let showsSidebar: Bool
     public let sidebarReveal: CGFloat
     public let sidebarWidth: CGFloat
@@ -147,6 +147,13 @@ public struct LibraryLayoutMetrics: Equatable {
             columns = gridWidth >= 680 ? 3 : gridWidth >= 360 ? 2 : 1
         case .inspirations:
             columns = 1
+        case .files:
+            columns = max(1, Int((gridWidth + 8) / 110))
+        }
+        if kind == .files {
+            cardHeight = min(112, max(48, floor((gridHeight - 8) / 2)))
+            rows = max(1, Int((gridHeight + 8) / (cardHeight + 8)))
+            return
         }
         if showsSidebar {
             let preferred: CGFloat = kind == .clipboard ? 144 : kind == .prompts ? 124 : 76
@@ -194,5 +201,8 @@ public struct LibraryLayoutTransition: Equatable {
     }
     public func changesColumns(for kind: LibraryLayoutMetrics.ContentKind) -> Bool {
         start[kind]!.columns != end[kind]!.columns
+    }
+    public func destination(for kind: LibraryLayoutMetrics.ContentKind) -> LibraryLayoutMetrics {
+        end[kind]!
     }
 }

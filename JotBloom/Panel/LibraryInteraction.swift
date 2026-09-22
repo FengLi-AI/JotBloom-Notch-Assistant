@@ -84,20 +84,44 @@ struct BloomLibraryFilter: View {
     }
 }
 
+private struct BloomCardPressedKey: PreferenceKey {
+    static var defaultValue = false
+    static func reduce(value: inout Bool, nextValue: () -> Bool) { value = nextValue() || value }
+}
+
+/// Uses the button's native pressed state, without adding a gesture that competes with scrolling or dragging.
+struct BloomLibraryPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label.preference(key: BloomCardPressedKey.self, value: configuration.isPressed)
+    }
+}
+
 struct BloomLibraryCard: ViewModifier {
+    enum SelectionStyle { case persistent, interaction }
+    @Environment(\.bloomKeyboardNavigation) private var keyboardNavigation
+    @Environment(\.bloomReduceMotion) private var reduceMotion
+    @State private var pressed = false
     let selected: Bool
     var hovered = false
+    var selectionStyle: SelectionStyle = .persistent
+
+    private var highlighted: Bool {
+        selectionStyle == .persistent ? selected : pressed || (selected && keyboardNavigation)
+    }
+
     func body(content: Content) -> some View {
         content
             .background(BloomTheme.libraryCard, in: RoundedRectangle(cornerRadius: 10))
             .overlay {
-                RoundedRectangle(cornerRadius: 10).fill(BloomTheme.blue.opacity(selected ? 0.07 : hovered ? 0.03 : 0))
+                RoundedRectangle(cornerRadius: 10).fill(BloomTheme.blue.opacity(highlighted ? (selectionStyle == .persistent ? 0.07 : 0.035) : hovered ? 0.03 : 0))
                     .allowsHitTesting(false)
             }
             .overlay {
-                RoundedRectangle(cornerRadius: 10).strokeBorder(selected ? BloomTheme.blue.opacity(0.8) : BloomTheme.libraryEdge, lineWidth: selected ? 1.2 : 0.6)
+                RoundedRectangle(cornerRadius: 10).strokeBorder(highlighted ? BloomTheme.blue.opacity(selectionStyle == .persistent ? 0.8 : 0.4) : BloomTheme.libraryEdge, lineWidth: highlighted ? (selectionStyle == .persistent ? 1.2 : 1) : 0.6)
                     .allowsHitTesting(false)
             }
+            .onPreferenceChange(BloomCardPressedKey.self) { pressed = $0 }
+            .animation(reduceMotion || selectionStyle == .persistent ? nil : .easeOut(duration: pressed ? 0.06 : 0.18), value: highlighted)
     }
 }
 

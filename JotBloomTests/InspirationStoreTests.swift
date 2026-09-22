@@ -206,7 +206,7 @@ final class InspirationStoreTests: XCTestCase {
 
         let reopened = try JotBloomStore(dataDirectoryURL: fixture.directory)
         XCTAssertEqual(try reopened.inspirationSynchronously(id: 1), expected)
-        XCTAssertEqual(try reopened.schemaVersionSynchronously(), 7)
+        XCTAssertEqual(try reopened.schemaVersionSynchronously(), DatabaseMigrator.currentVersion)
         reopened.close()
         TestTemporaryDirectory.remove(fixture.directory)
     }
@@ -355,7 +355,7 @@ final class InspirationStoreTests: XCTestCase {
             updatedAtUTCms: 80_001
         )
 
-        XCTAssertEqual(try fixture.store.schemaVersionSynchronously(), 7)
+        XCTAssertEqual(try fixture.store.schemaVersionSynchronously(), DatabaseMigrator.currentVersion)
         XCTAssertFalse(
             FileManager.default.fileExists(
                 atPath: fixture.directory

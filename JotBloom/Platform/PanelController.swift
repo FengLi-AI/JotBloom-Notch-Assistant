@@ -20,6 +20,11 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
     private let settingsModel: SettingsViewModel?
     private let promptModel: PromptLibraryViewModel?
     private let chatModel: ChatViewModel?
+    private let fileShelfModel: FileShelfViewModel?
+    private let fileShelfDrag: FileShelfDragController?
+    private var fileDragActive = false
+    private var shelfPreviousPreview = false
+    private var shelfPreviousExpansion = false
     var onChatCopy: (String) -> Bool = { _ in false }
     private var systemInteractionDepth = 0
     private var focusEventGeneration: UInt64 = 0
@@ -31,6 +36,7 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
     private var frameAnimationTimer: Timer?
     private var currentMetrics: ScreenMetrics?
     private var expansionChangesAnimated = true
+    private var expansionUpdateGeneration: UInt64 = 0
     private var detailTransitionInProgress = false
     private var promptPreviousExpansion = false
     private var cancellables: Set<AnyCancellable> = []
@@ -48,7 +54,9 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         dataDirectory: URL? = nil,
         settingsModel: SettingsViewModel? = nil,
         promptModel: PromptLibraryViewModel? = nil,
-        chatModel: ChatViewModel? = nil
+        chatModel: ChatViewModel? = nil,
+        fileShelfModel: FileShelfViewModel? = nil,
+        fileShelfDrag: FileShelfDragController? = nil
     ) {
         self.inspirationViewModel = inspirationViewModel
         self.clipboardViewModel = clipboardViewModel
@@ -58,7 +66,14 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         self.settingsModel = settingsModel
         self.promptModel = promptModel
         self.chatModel = chatModel
+        self.fileShelfModel = fileShelfModel
+        self.fileShelfDrag = fileShelfDrag
         super.init()
+        fileShelfDrag?.panelFrame = { [weak self] in self?.panel.frame ?? .zero }
+        fileShelfDrag?.onActivity = { [weak self] active in
+            self?.focusEventGeneration &+= 1
+            self?.fileDragActive = active
+        }
         panelState.onChangeAppearance = { [weak self] appearance, rect in self?.changeAppearance(appearance, controlRect: rect) }
         settingsModel?.onShortcutRecordingChanged = { [weak self] active in self?.setShortcutRecording(active) }
         chatModel?.onSystemInteraction = { [weak self] in self?.setSystemInteraction($0) }
@@ -114,10 +129,25 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         panelState.$isExpanded
             .dropFirst()
             .sink { [weak self] isExpanded in
-                self?.resizePanel(
-                    expanded: isExpanded,
-                    animated: self?.expansionChangesAnimated ?? false
-                )
+                // @Published emits before assignment. Resizing synchronously can
+                // lay out the embedded native grid using the previous SwiftUI route.
+                guard let self else { return }
+                expansionUpdateGeneration &+= 1
+                // present/dismiss own their final frame. A deferred reset must not
+                // cancel the new presentation's fade and leave its alpha at zero.
+                guard expansionChangesAnimated else { return }
+                let generation = expansionUpdateGeneration
+                let wasExpanded = panelState.isExpanded
+                // Stage the visual starting point before @Published assigns the
+                // new route. Deferring this lets SwiftUI render the endpoint for
+                // one frame, then jump back when the window animation begins.
+                let prepared = prepareLibraryResize(expanded: isExpanded, wasExpanded: wasExpanded)
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, expansionUpdateGeneration == generation,
+                          panelState.isPresented, !suspendedForDirectorySelection,
+                          panelState.isExpanded == isExpanded else { return }
+                    resizePanel(expanded: isExpanded, animated: true, wasExpanded: wasExpanded, transitionPrepared: prepared)
+                }
             }
             .store(in: &cancellables)
 
@@ -495,6 +525,59 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         return checks
     }
 
+    /// Check opacity as well as window ordering: an ordered, fully transparent panel
+    /// used to pass lifecycle checks while the companion correctly stayed hidden.
+    func debugPresentationProbe(toggle: () -> Void) async throws -> [(String, Bool)] {
+        var checks: [(String, Bool)] = []
+        let preferences = panelState.preferences
+        defer { panelState.preferences = preferences }
+        func settle() async throws { try await Task.sleep(nanoseconds: 600_000_000) }
+        func visible() -> Bool {
+            panel.isVisible && panelState.isPresented && panel.alphaValue == 1 &&
+                panel.childWindows?.first?.alphaValue == 1 && frameAnimationTimer == nil &&
+                currentMetrics.map { panel.frame == PanelGeometry.panelFrame(for: $0, expanded: panelState.isExpanded) } == true
+        }
+        try await settle()
+        checks.append(("startup_panel_opaque", visible()))
+        toggle(); try await settle()
+        for slot: PanelSlot in [.inspiration, .clipboard, .prompts, .inspirationLibrary, .fileShelf, .chat, .globalSearch] {
+            panelState.preferences.defaultSlot = slot
+            toggle(); try await settle()
+            checks.append(("notch_open_" + slot.rawValue, visible() && panelState.selectedTab.rawValue == slot.rawValue))
+            toggle(); try await settle()
+            checks.append(("notch_close_" + slot.rawValue, !panel.isVisible && !panelState.isPresented && closingVisual == nil))
+        }
+        panelState.preferences.defaultSlot = .clipboard
+        toggle()
+        panelState.expand(); panelState.collapse()
+        toggle(); toggle()
+        try await settle()
+        checks.append(("queued_resize_then_reopen_opaque", visible() && !panelState.isExpanded))
+        toggle(); try await settle()
+        toggle(); beginFileShelfPreview()
+        try await settle()
+        checks.append(("shelf_preview_during_fade_opaque", visible() && panelState.isExpanded && panelState.fileShelfPreview))
+        toggle(); try await settle()
+        toggle()
+        try await Task.sleep(nanoseconds: 50_000_000)
+        let openingAlpha = panel.alphaValue
+        toggle()
+        checks.append(("early_close_preserves_opacity", closingVisual.map { abs($0.alphaValue - openingAlpha) < 0.01 } ?? (openingAlpha == 0)))
+        try await settle()
+        checks.append(("early_close_cleans_up", !panel.isVisible && closingVisual == nil))
+        toggle(); beginFileShelfPreview()
+        try await Task.sleep(nanoseconds: 100_000_000)
+        checks.append(("shelf_resize_continues_fade", panel.alphaValue > 0))
+        try await settle()
+        toggle(); try await settle()
+        panelState.preferences.reduceMotion = true
+        toggle(); try await settle()
+        checks.append(("reduced_motion_open_opaque", visible()))
+        toggle(); try await settle()
+        checks.append(("reduced_motion_close_hidden", !panel.isVisible && closingVisual == nil))
+        return checks
+    }
+
     func debugReviewLifecycleProbe(show: () -> Void, toggle: () -> Void) async throws -> [(String, Bool)] {
         var checks: [(String, Bool)] = []
         func settle() async throws { try await Task.sleep(nanoseconds: 550_000_000) }
@@ -680,7 +763,142 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         requestSelectTab(.inspirationLibrary)
         openInspirationFromLibrary(identifier: id)
     }
-    func debugLibraryMotionProbe(output: URL) async throws {
+    /// Exercises real views and delegate handoffs with isolated test files only.
+    func debugFileShelfProbe(output: URL, show: () -> Void) async throws -> Bool {
+        guard ProcessInfo.processInfo.environment["JOTBLOOM_FILE_SHELF_REVIEW"] != nil,
+              let model = fileShelfModel, let drag = fileShelfDrag, let first = model.items.first else { return false }
+        try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+        automaticDismissalEnabled = false
+        panelState.preferences.reduceMotion = true
+        var checks: [(String, Bool)] = []
+        func settle() async { try? await Task.sleep(nanoseconds: 280_000_000) }
+        func findGrid(_ view: NSView?) -> ShelfCollectionView? {
+            guard let view else { return nil }
+            if let grid = view as? ShelfCollectionView { return grid }
+            return view.subviews.lazy.compactMap { findGrid($0) }.first
+        }
+        for appearance: PanelAppearance in [.dark, .light] {
+            panelState.preferences.appearance = appearance
+            for scale in [0.85, 1.0, 1.2] {
+                for expanded in [false, true] {
+                    debugSetExpanded(expanded)
+                    await settle()
+                    panel.setFrame(NSRect(x: 400, y: 60, width: 640 * scale, height: (expanded ? 700 : 300) * scale), display: true)
+                    await settle()
+                    let name = "\(appearance.rawValue)-\(Int(scale * 100))-\(expanded ? "expanded" : "compact")"
+                    try debugCapturePromptPanel(to: output.appendingPathComponent(name + ".png"))
+                    if let grid = findGrid(panel.contentView), let layout = grid.collectionViewLayout {
+                        let visible = layout.layoutAttributesForElements(in: grid.visibleRect).filter { grid.visibleRect.insetBy(dx: -1, dy: -1).contains($0.frame) }
+                        let valid = grid.numberOfItems(inSection: 0) == model.items.count && visible.count >= min(6, model.items.count)
+                            && visible.allSatisfy { $0.frame.minX >= 0 && $0.frame.maxX <= grid.bounds.width + 1 }
+                        checks.append((name, valid))
+                    } else { checks.append((name, false)) }
+                }
+            }
+        }
+        panelState.preferences.appearance = .dark
+        _ = present(); debugShowFileShelf(); await settle()
+        guard let grid = findGrid(panel.contentView), let owner = grid.owner else { return false }
+        if let layout = grid.collectionViewLayout {
+            let gap = layout.layoutAttributesForDropTarget(at: NSPoint(x: 10, y: layout.collectionViewContentSize.height + 40))
+            checks.append(("native_empty_space_is_append_target", gap?.representedElementCategory == .interItemGap && gap?.indexPath?.item == model.items.count))
+        }
+        if let layout = grid.collectionViewLayout as? ShelfFlowLayout {
+            let total = model.items.count
+            func frames() -> [NSRect] { (0..<total).compactMap { layout.layoutAttributesForItem(at: IndexPath(item: $0, section: 0))?.frame } }
+            let originalFrames = frames()
+            layout.reducesMotion = true
+            layout.setDrag(excluding: [1], insertion: 1)
+            checks.append(("lift_keeps_neighbors_in_place", frames().enumerated().allSatisfy { $0.offset == 1 || $0.element == originalFrames[$0.offset] }))
+            checks.append(("lift_hides_only_dragged_item", (0..<total).filter { layout.layoutAttributesForItem(at: IndexPath(item: $0, section: 0))?.alpha == 0 } == [1]))
+            layout.setDrag(excluding: [1], insertion: total - 1)
+            let movedFrames = frames()
+            checks.append(("single_gap_no_source_hole", (1..<(total - 1)).allSatisfy { movedFrames[$0 + 1] == originalFrames[$0] }))
+            layout.setDrag(excluding: [], insertion: nil)
+            checks.append(("outside_restores_full_order_no_gap", frames() == originalFrames && layout.insertion == nil))
+            layout.setDrag(excluding: [0, 2], insertion: 2)
+            checks.append(("batch_drag_uses_one_gap", layout.excluded.count == 2 && layout.insertion == 2 && layout.originalIndex(forInsertion: 2) == 4))
+            layout.setDrag(excluding: [], insertion: nil)
+            layout.reducesMotion = false
+            layout.setDrag(excluding: [1], insertion: total - 1)
+            try await Task.sleep(nanoseconds: 80_000_000)
+            let intermediate = frames()
+            checks.append(("reorder_has_intermediate_positions", intermediate[2] != originalFrames[2] && intermediate[2] != movedFrames[2]))
+            await settle()
+            checks.append(("reorder_settles_at_target", frames()[2] == movedFrames[2]))
+            try debugCapturePromptPanel(to: output.appendingPathComponent("single-gap-sort.png"))
+            layout.setDrag(excluding: [], insertion: nil, animated: false)
+        }
+        let ids = Set(model.items.prefix(2).map(\.id))
+        model.selection = ids
+        let event = NSEvent.mouseEvent(with: .leftMouseDragged, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: panel.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 0)!
+        let paths = Set(model.items.indices.prefix(2).map { IndexPath(item: $0, section: 0) })
+        checks.append(("native_drag_selection_available", owner.collectionView(grid, canDragItemsAt: paths, with: event)))
+        let pasteboard = NSPasteboard.withUniqueName()
+        let writers = paths.sorted().compactMap { owner.collectionView(grid, pasteboardWriterForItemAt: $0) }
+        pasteboard.writeObjects(writers)
+        checks.append(("native_pasteboard_original_urls", Set(FileShelfDragController.urls(pasteboard)) == Set(model.items.prefix(2).map(\.url))))
+        pasteboard.releaseGlobally()
+        let previous = model.items.map(\.id)
+        drag.startInternal(ids)
+        let internalInfo = FileShelfReviewDrag(urls: model.items.prefix(2).map(\.url), source: grid)
+        let accepted = owner.collectionView(grid, acceptDrop: internalInfo, indexPath: IndexPath(item: model.items.count, section: 0), dropOperation: .before)
+        drag.endInternal(.move)
+        await settle()
+        checks.append(("native_group_reorder", accepted && model.items.map(\.id) == Array(previous.dropFirst(2)) + Array(previous.prefix(2)) && panel.isVisible))
+        let reordered = model.items.map(\.id)
+        drag.startInternal(ids); drag.endInternal([])
+        checks.append(("rejected_drag_keeps_order_and_panel", model.items.map(\.id) == reordered && panel.isVisible))
+        model.kind = .image; model.date = .yesterday
+        requestSelectTab(.inspiration); panelState.collapse()
+        inspirationViewModel.text = "文件中转站回归测试草稿"
+        let external = FileShelfReviewDrag(urls: [first.url])
+        checks.append(("notch_hover_keeps_page_size_filters", drag.enter(external, notchFrame: NSRect(x: 500, y: 900, width: 179, height: 32)) && !panelState.fileShelfPreview && !panelState.isExpanded && model.kind == .image && model.date == .yesterday && drag.notchFeedback.phase == .hover))
+        drag.cancel()
+        checks.append(("cancel_restores_page_filters_and_draft", !panelState.fileShelfPreview && !panelState.isExpanded && panelState.selectedTab == .inspiration && model.kind == .image && model.date == .yesterday && inspirationViewModel.text == "文件中转站回归测试草稿"))
+        let receiver = NotchDropView(frame: NSRect(x: 0, y: 0, width: 175, height: 32)); receiver.fileShelf = drag
+        let cancelledDrag = FileShelfReviewDrag(urls: [first.url])
+        _ = receiver.draggingEntered(cancelledDrag); receiver.draggingEnded(cancelledDrag)
+        checks.append(("native_drag_end_restores_cancelled_preview", !drag.active && !panelState.fileShelfPreview && model.kind == .image && model.date == .yesterday))
+        onRequestHide?()
+        await settle()
+        let quick = FileShelfReviewDrag(urls: [first.url])
+        checks.append(("notch_accepts_original_url", receiver.draggingEntered(quick) == .copy && receiver.performDragOperation(quick)))
+        await settle()
+        checks.append(("notch_capture_stays_hidden_and_keeps_draft", !panel.isVisible && !panelState.fileShelfPreview && model.items.first?.id == first.id && inspirationViewModel.text == "文件中转站回归测试草稿"))
+        checks.append(("notch_success_label", drag.notchFeedback.feedback.stage.label == "已收录至中转站"))
+        var feedbackPhases: [NotchFeedbackPhase] = []
+        for _ in 0..<400 { drag.notchFeedback.advance(0.01); feedbackPhases.append(drag.notchFeedback.phase) }
+        checks.append(("notch_success_rim_and_cleanup", feedbackPhases.contains(.glow) && feedbackPhases.contains(.flash) && drag.notchFeedback.phase == .idle))
+        show(); debugShowFileShelf(); await settle()
+        if let nextGrid = findGrid(panel.contentView), let nextOwner = nextGrid.owner {
+            let next = FileShelfReviewDrag(urls: [first.url])
+            checks.append(("grid_drop_accepted", nextOwner.collectionView(nextGrid, acceptDrop: next, indexPath: IndexPath(item: model.items.count, section: 0), dropOperation: .before)))
+            await settle()
+            checks.append(("grid_drop_stays_open_at_position", panel.isVisible && model.items.last?.id == first.id))
+        }
+        model.kind = .image; model.date = .yesterday
+        let second = FileShelfReviewDrag(urls: [first.url]); _ = drag.enter(second); drag.cancel()
+        checks.append(("cancel_preserves_shelf_filters", !panelState.fileShelfPreview && panelState.selectedTab == .fileShelf && model.kind == .image && model.date == .yesterday))
+        model.resetFilters()
+        drag.startInternal([first.id]); drag.endInternal(.copy)
+        checks.append(("external_handoff_hides_without_removing", !panel.isVisible && model.items.contains { $0.id == first.id }))
+        show(); debugShowFileShelf(); await settle()
+        model.kind = .image; model.confirmingClear = true
+        await settle(); try debugCapturePromptPanel(to: output.appendingPathComponent("clear-confirmation.png"))
+        checks.append(("clear_confirmation_protects_all_records", !drag.canReceive && !prepareForDismissal()))
+        model.confirmingClear = false; model.resetFilters()
+        let report = checks.map { ["name": $0.0, "passed": $0.1] as [String: Any] }
+        try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys]).write(to: output.appendingPathComponent("checks.json"))
+        for (name, passed) in checks { print("FILE_SHELF_REVIEW \(name)=\(passed)") }
+        print("FILE_SHELF_REVIEW passed=\(checks.filter(\.1).count)/\(checks.count)"); fflush(stdout)
+        panelState.preferences.reduceMotion = false
+        return checks.allSatisfy(\.1)
+    }
+
+    func debugShowFileShelf() { automaticDismissalEnabled = false; requestSelectTab(.fileShelf) }
+
+    func debugLibraryMotionProbe(output: URL) async throws -> Bool {
         try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
         _ = present()
         var checks: [(String, Bool)] = []
@@ -693,26 +911,37 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
             panelState.update(metrics: metrics)
             panelState.preferences.appearance = appearance
             panelState.preferences.reduceMotion = false
-            for tab: PanelTab in [.clipboard, .prompts, .inspirationLibrary] {
+            let tabs: [PanelTab] = ProcessInfo.processInfo.environment["JOTBLOOM_SHELF_RESIZE_ONLY"] == "1" ? [.fileShelf] : [.clipboard, .prompts, .inspirationLibrary, .fileShelf]
+            for tab in tabs {
                 requestSelectTab(tab); debugSetExpanded(false)
                 try await Task.sleep(nanoseconds: 500_000_000)
-                let prefix = tab == .clipboard ? "clipboard" : tab == .prompts ? "prompt" : "library"
+                let prefix = tab == .clipboard ? "clipboard" : tab == .prompts ? "prompt" : tab == .fileShelf ? "shelf" : "library"
+                let kind: LibraryLayoutMetrics.ContentKind = tab == .clipboard ? .clipboard : tab == .prompts ? .prompts : tab == .fileShelf ? .files : .inspirations
                 for expanding in [true, false] {
                     let name = "\(appearance.rawValue)-\(Int(scale * 100))-\(prefix)-\(expanding ? "expand" : "collapse")"
                     var frames: [[String: Any]] = []
                     var heights: [CGFloat] = []
                     let start = ProcessInfo.processInfo.systemUptime
+                    let inset = panelState.notchHeight + (tab == .fileShelf ? 80 : 46)
+                    let before = LibraryLayoutMetrics(size: .init(width: panel.frame.width - 24, height: panel.frame.height - inset), expanded: !expanding, kind: kind)
                     debugSetExpanded(expanding)
+                    checks.append((name + "-first-frame", panelState.libraryResize?.layout(for: kind) == before && panelState.libraryResize?.progress == 0))
+                    var reveals: [CGFloat] = []
+                    var cardHeights: [CGFloat] = []
                     for index in 0..<16 {
                         let filename = name + "-\(index).png"
                         try debugCapturePromptPanel(to: output.appendingPathComponent(filename))
                         heights.append(panel.frame.height)
+                        let live = panelState.libraryResize?.layout(for: kind) ?? LibraryLayoutMetrics(size: .init(width: panel.frame.width - 24, height: panel.frame.height - inset), expanded: expanding, kind: kind)
+                        reveals.append(live.sidebarReveal); cardHeights.append(live.cardHeight)
                         frames.append(["file": filename, "time": ProcessInfo.processInfo.systemUptime - start,
                                        "height": panel.frame.height, "progress": panelState.libraryResize?.progress ?? 1])
                         try await Task.sleep(nanoseconds: 30_000_000)
                     }
                     let monotonic = zip(heights, heights.dropFirst()).allSatisfy { expanding ? $0.1 >= $0.0 - 0.1 : $0.1 <= $0.0 + 0.1 }
-                    checks.append((name, monotonic && panelState.libraryResize == nil && panelState.isExpanded == expanding))
+                    let continuous = zip(reveals, reveals.dropFirst()).allSatisfy { expanding ? $0.1 >= $0.0 : $0.1 <= $0.0 }
+                    checks.append((name, monotonic && continuous && panelState.libraryResize == nil && panelState.isExpanded == expanding))
+                    if tab == .fileShelf { checks.append((name + "-icons-scale", zip(cardHeights, cardHeights.dropFirst()).allSatisfy { expanding ? $0.1 >= $0.0 : $0.1 <= $0.0 })) }
                     sequences.append(["name": name, "frames": frames])
                 }
                 debugSetExpanded(true); try await Task.sleep(nanoseconds: 90_000_000)
@@ -723,18 +952,21 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         }
         panelState.preferences.reduceMotion = true
         debugSetExpanded(false)
-        checks.append(("reduced-motion-immediate", panelState.libraryResize == nil && panel.frame.height == 300))
+        try await Task.sleep(nanoseconds: 20_000_000)
+        checks.append(("reduced-motion-no-animation", panelState.libraryResize == nil && panel.frame.height == 300))
         try JSONSerialization.data(withJSONObject: sequences, options: [.prettyPrinted]).write(to: output.appendingPathComponent("motion.json"))
         for (name, passed) in checks { print("MOTION \(name)=\(passed)") }
         print("MOTION passed=\(checks.filter(\.1).count)/\(checks.count)"); fflush(stdout)
         panelState.preferences.reduceMotion = false
         panelState.preferences.appearance = .dark
         _ = present(); requestSelectTab(.prompts)
+        return checks.allSatisfy(\.1)
     }
 
     /// Captures the real SwiftUI hierarchy at the supported size limits using isolated fixtures.
     func debugAdaptiveLibraryProbe(output: URL) async throws {
         try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+        await fileShelfModel?.waitForPendingOperations()
         panelState.preferences.reduceMotion = true
         var report: [[String: Any]] = []
         for appearance: PanelAppearance in [.dark, .light] {
@@ -747,6 +979,7 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
                         clipboardViewModel.filterDate(.all)
                         if let first = promptModel?.items.first { promptModel?.select(first.id) }
                         if let first = inspirationLibraryViewModel.items.first { inspirationLibraryViewModel.select(first.id) }
+                        panelState.usePointerNavigation()
                         try await Task.sleep(nanoseconds: 250_000_000)
                         let size = NSSize(width: 640 * scale, height: (expanded ? 700 : 300) * scale)
                         panel.setFrame(NSRect(origin: .init(x: 400, y: 60), size: size), display: true)
@@ -769,7 +1002,7 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
                             debugSendKeyDown(keyCode: UInt16(kVK_DownArrow))
                             keyboardOK = model.selectedID == model.items[min(columnCount, model.items.count - 1)].id
                         }
-                        let valid = !visible.isEmpty && keyboardOK && viewport.width > 0 && viewport.maxY <= size.height
+                        let valid = panelState.selectedTab == tab && !visible.isEmpty && keyboardOK && viewport.width > 0 && viewport.maxY <= size.height
                         report.append(["name": name, "valid": valid, "visibleCards": visible.count, "columns": columnCount,
                                        "cardHeight": visible.first?.height ?? 0, "viewport": NSStringFromRect(viewport), "keyboard": keyboardOK])
                         print("ADAPTIVE \(name) visible=\(visible.count) columns=\(columnCount) keyboard=\(keyboardOK) valid=\(valid)")
@@ -1379,9 +1612,26 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         }
     }
 
+    func beginFileShelfPreview() {
+        shelfPreviousExpansion = panelState.isExpanded
+        shelfPreviousPreview = panelState.fileShelfPreview
+        panelState.fileShelfPreview = true
+        panelState.expand()
+    }
+    func finishFileShelfPreview(cancelled: Bool, close: Bool) {
+        if cancelled {
+            panelState.fileShelfPreview = shelfPreviousPreview
+            if !shelfPreviousExpansion { panelState.collapse() }
+        }
+        // Keep the temporary route until dismissal so an unrelated unfinished editor
+        // is preserved, rather than being flushed by a successful quick drop.
+    }
+
     var isPanelKeyWindow: Bool {
         panel.isKeyWindow
     }
+
+    var reducesShelfMotion: Bool { panelState.reducesMotion }
 
     @discardableResult
     func present() -> Bool {
@@ -1399,6 +1649,7 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         panelState.libraryResize = nil
         currentMetrics = metrics
         expansionChangesAnimated = false
+        panelState.fileShelfPreview = false
         panelState.resetForPresentation()
         panelState.update(metrics: metrics)
         expansionChangesAnimated = true
@@ -1413,8 +1664,7 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         panel.contentView?.displayIfNeeded()
         panel.orderFrontRegardless()
         panelState.setPresented(true)
-        panel.makeKey()
-        completeTabSelection(panelState.selectedTab)
+        if !fileDragActive { panel.makeKey(); completeTabSelection(panelState.selectedTab) }
         if !panelState.reducesMotion {
             animatePanel(to: finalFrame, duration: 0.46, curve: (0.18, 0.88, 0.24, 1.035), fadeIn: true)
         }
@@ -1424,7 +1674,9 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
     }
 
     func prepareForDismissal() -> Bool {
+        guard !fileDragActive, fileShelfModel?.busy != true, fileShelfModel?.confirmingClear != true else { return false }
         guard settingsModel?.confirmingClear != true else { return false }
+        if panelState.fileShelfPreview { return true }
         guard settingsModel?.allowLeavingPrompt() != false, chatModel?.canLeaveChat() != false else { return false }
         guard chatModel?.confirmingDelete != true else { return false }
         chatModel?.cancelAuthorization()
@@ -1438,8 +1690,10 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         // Directory selection preserves the route, scroll position and expanded size.
         guard !suspendedForDirectorySelection else { return }
         guard prepareForDismissal() else { return }
+        let preservingEditor = panelState.fileShelfPreview
         settingsModel?.recordingShortcut = false
         promptModel?.panelDismissed()
+        panelState.fileShelfPreview = false
         focusEventGeneration &+= 1
         restoringSystemFocus = false
         frameAnimationTimer?.invalidate()
@@ -1447,8 +1701,10 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         appearanceReveal?.removeFromSuperview(); appearanceReveal = nil
         animateDismissalVisual()
         detailTransitionInProgress = false
-        inspirationLibraryViewModel.resetForPanelDismissal()
-        globalSearchViewModel.resetForPanelDismissal()
+        if !preservingEditor {
+            inspirationLibraryViewModel.resetForPanelDismissal()
+            globalSearchViewModel.resetForPanelDismissal()
+        }
         panel.orderOut(nil)
         panelState.setPresented(false)
         expansionChangesAnimated = false
@@ -1458,6 +1714,7 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
     }
 
     func close() {
+        expansionUpdateGeneration &+= 1
         panelState.setPresented(false)
         settingsModel?.recordingShortcut = false
         setShortcutRecording(false)
@@ -1476,7 +1733,7 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
             settingsModel?.feedback = "录制已取消：键盘焦点离开了萌生。若组合被系统接收，请重新录制其他组合，例如 ⌃⌥K。"
         }
         guard notification.object as? NSWindow === panel,
-              panel.isVisible, !panel.isKeyWindow, systemInteractionDepth == 0,
+              panel.isVisible, !panel.isKeyWindow, systemInteractionDepth == 0, !fileDragActive,
               !restoringSystemFocus, settingsModel?.maintaining != true else { return }
 #if DEBUG
         guard automaticDismissalEnabled else { return }
@@ -1485,7 +1742,7 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         DispatchQueue.main.async { [weak self] in
             // A queued resign is obsolete once focus returned or a system operation started.
             guard let self, focusEventGeneration == expected,
-                  panel.isVisible, !panel.isKeyWindow, systemInteractionDepth == 0,
+                  panel.isVisible, !panel.isKeyWindow, systemInteractionDepth == 0, !fileDragActive,
                   !restoringSystemFocus, settingsModel?.maintaining != true else { return }
             self.onRequestHide?()
         }
@@ -1574,6 +1831,7 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         panel.appearance = NSAppearance(named: panelState.preferences.appearance == .dark ? .darkAqua : .aqua)
         panel.onEscape = { [weak self] in
             guard let self else { return }
+            if panelState.fileShelfPreview { onRequestHide?(); return }
             if promptModel?.editingID != nil { promptModel?.cancelEdit(); return }
             if promptModel?.detailID != nil, !panelState.isSettingsOpen {
                 _ = promptModel?.returnFromDetail(); return
@@ -1591,7 +1849,7 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         }
         panel.onDiscuss = { [weak self] in self?.inspirationViewModel.discuss() }
         panel.isChatActive = { [weak self] in
-            self?.panelState.selectedTab == .chat && self?.panelState.isSettingsOpen == false
+            self?.panelState.selectedTab == .chat && self?.panelState.fileShelfPreview == false && self?.panelState.isSettingsOpen == false
         }
         panel.onNewChat = { [weak self] in self?.chatModel?.requestNew() }
         panel.onSaveChatSummary = { [weak self] in
@@ -1603,28 +1861,28 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         }
         panel.onExpand = { [weak self] in self?.panelState.expand() }
         panel.onCollapse = { [weak self] in
-            guard self?.promptModel?.detailID == nil else { return }
+            guard self?.panelState.fileShelfPreview == true || self?.promptModel?.detailID == nil else { return }
             self?.panelState.collapse()
         }
         panel.isClipboardActive = { [weak self] in
             (self?.panelState.selectedTab == .clipboard || (self?.panelState.selectedTab == .prompts && self?.promptModel?.editingID == nil && self?.promptModel?.detailID == nil))
-                && self?.panelState.isSettingsOpen == false && self?.clipboardViewModel.confirmingClear == false
+                && self?.panelState.fileShelfPreview == false && self?.panelState.isSettingsOpen == false && self?.clipboardViewModel.confirmingClear == false
         }
         panel.isInspirationActive = { [weak self] in
             self?.panelState.selectedTab == .inspiration
-                && self?.panelState.isSettingsOpen == false && self?.clipboardViewModel.confirmingClear == false
+                && self?.panelState.fileShelfPreview == false && self?.panelState.isSettingsOpen == false && self?.clipboardViewModel.confirmingClear == false
         }
         panel.isInspirationLibraryListActive = { [weak self] in
             self?.panelState.selectedTab == .inspirationLibrary
-                && self?.panelState.isSettingsOpen == false && self?.clipboardViewModel.confirmingClear == false
+                && self?.panelState.fileShelfPreview == false && self?.panelState.isSettingsOpen == false && self?.clipboardViewModel.confirmingClear == false
                 && self?.isInspirationDetailVisible == false
         }
         panel.isInspirationLibraryDetailActive = { [weak self] in
-            self?.isInspirationDetailVisible == true
+            self?.isInspirationDetailVisible == true && self?.panelState.fileShelfPreview == false
         }
         panel.isGlobalSearchActive = { [weak self] in
             self?.panelState.selectedTab == .globalSearch
-                && self?.panelState.isSettingsOpen == false && self?.clipboardViewModel.confirmingClear == false
+                && self?.panelState.fileShelfPreview == false && self?.panelState.isSettingsOpen == false && self?.clipboardViewModel.confirmingClear == false
                 && self?.isInspirationDetailVisible == false
         }
         panel.onSelectInspiration = { [weak self] in
@@ -1721,6 +1979,8 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
                 settingsModel: settingsModel,
                 promptModel: promptModel,
                 chatModel: chatModel,
+                fileShelfModel: fileShelfModel,
+                fileShelfDrag: fileShelfDrag,
                 onChatCopy: { [weak self] in self?.onChatCopy($0) ?? false }
             )
         )
@@ -1758,6 +2018,16 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
     }
 
     private func handleSettingsKey(_ event: NSEvent) -> Bool {
+        if fileDragActive, event.keyCode == UInt16(kVK_Escape) { fileShelfDrag?.cancel(); return true }
+        if fileShelfModel?.confirmingClear == true {
+            if event.keyCode == UInt16(kVK_Escape) { fileShelfModel?.confirmingClear = false; return true }
+            return ![UInt16(kVK_Tab), UInt16(kVK_Return), UInt16(kVK_Space)].contains(event.keyCode)
+        }
+        if panelState.fileShelfPreview || (!panelState.isSettingsOpen && panelState.selectedTab == .fileShelf) {
+            if event.modifierFlags.contains(.command), event.charactersIgnoringModifiers == "a" { fileShelfModel?.selectAll(); return true }
+            if event.modifierFlags.contains(.command), event.charactersIgnoringModifiers == "z" { Task { await fileShelfModel?.undo() }; return true }
+            if event.keyCode == UInt16(kVK_Delete) || event.keyCode == UInt16(kVK_ForwardDelete) { Task { await fileShelfModel?.removeSelection() }; return true }
+        }
         if chatModel?.confirmingDelete == true {
             if event.keyCode == UInt16(kVK_Escape) { chatModel?.confirmingDelete = false; return true }
             return event.keyCode != UInt16(kVK_Tab) && event.keyCode != UInt16(kVK_Return) && event.keyCode != UInt16(kVK_Space)
@@ -1801,6 +2071,8 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
     }
 
     private func requestSelectTab(_ tab: PanelTab) {
+        guard !fileDragActive, fileShelfModel?.busy != true, fileShelfModel?.confirmingClear != true else { return }
+        if panelState.fileShelfPreview && tab == panelState.selectedTab { panelState.fileShelfPreview = false; return }
         guard settingsModel?.allowLeavingPrompt() != false, chatModel?.canLeaveChat() != false else { return }
         guard chatModel?.confirmingDelete != true else { return }
         if tab != panelState.selectedTab { chatModel?.cancelAuthorization() }
@@ -1810,6 +2082,7 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         if panelState.selectedTab == .prompts, tab != .prompts { promptModel?.panelDismissed() }
         guard settingsModel?.maintaining != true else { return }
         guard !detailTransitionInProgress else { return }
+        panelState.fileShelfPreview = false
         if panelState.isSettingsOpen { panelState.closeSettings() }
 
         if isInspirationDetailVisible {
@@ -1834,6 +2107,7 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
 
         if panelState.selectedTab == tab {
             switch tab {
+            case .fileShelf: Task { await fileShelfModel?.refresh() }
             case .inspiration:
                 inspirationViewModel.requestInputFocus()
             case .clipboard:
@@ -1857,6 +2131,7 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
     private func completeTabSelection(_ tab: PanelTab) {
         panelState.select(tab)
         switch tab {
+        case .fileShelf: Task { await fileShelfModel?.refresh() }
         case .inspiration:
             inspirationViewModel.refreshRecentInspirations()
             inspirationViewModel.requestInputFocus()
@@ -2001,7 +2276,28 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         }
     }
 
-    private func resizePanel(expanded: Bool, animated: Bool) {
+    private var usesLibraryResize: Bool {
+        panelState.fileShelfPreview || (!panelState.isSettingsOpen && !isInspirationDetailVisible &&
+            (panelState.selectedTab == .clipboard || panelState.selectedTab == .inspirationLibrary ||
+             panelState.selectedTab == .fileShelf || (panelState.selectedTab == .prompts && promptModel?.detailID == nil)))
+    }
+
+    @discardableResult
+    private func prepareLibraryResize(expanded: Bool, wasExpanded: Bool) -> Bool {
+        guard usesLibraryResize, panelState.isPresented, !panelState.reducesMotion,
+              let metrics = currentMetrics else { return false }
+        let frame = PanelGeometry.panelFrame(for: metrics, expanded: expanded)
+        let isShelf = panelState.fileShelfPreview || panelState.selectedTab == .fileShelf
+        let inset = panelState.notchHeight + (isShelf ? 80 : 46)
+        frameAnimationTimer?.invalidate(); frameAnimationTimer = nil
+        panelState.libraryResize = LibraryLayoutTransition(
+            fromSize: .init(width: panel.frame.width - 24, height: panel.frame.height - inset),
+            toSize: .init(width: frame.width - 24, height: frame.height - inset),
+            wasExpanded: wasExpanded, expanded: expanded, previous: panelState.libraryResize)
+        return true
+    }
+
+    private func resizePanel(expanded: Bool, animated: Bool, wasExpanded: Bool? = nil, transitionPrepared: Bool = false) {
         guard let metrics = currentMetrics else { return }
         let frame = PanelGeometry.panelFrame(for: metrics, expanded: expanded)
         frameAnimationTimer?.invalidate()
@@ -2010,18 +2306,13 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         guard animated, panel.isVisible, !panelState.reducesMotion else {
             panelState.libraryResize = nil
             panel.setFrame(frame, display: true)
+            panel.alphaValue = 1
             return
         }
 
-        let isLibrary = !panelState.isSettingsOpen && !isInspirationDetailVisible &&
-            (panelState.selectedTab == .clipboard || panelState.selectedTab == .inspirationLibrary ||
-             (panelState.selectedTab == .prompts && promptModel?.detailID == nil))
+        let isLibrary = usesLibraryResize
         if isLibrary {
-            let inset = panelState.notchHeight + 46 // page padding, footer and spacing
-            panelState.libraryResize = LibraryLayoutTransition(
-                fromSize: .init(width: panel.frame.width - 24, height: panel.frame.height - inset),
-                toSize: .init(width: frame.width - 24, height: frame.height - inset),
-                wasExpanded: panelState.isExpanded, expanded: expanded, previous: panelState.libraryResize)
+            if !transitionPrepared { prepareLibraryResize(expanded: expanded, wasExpanded: wasExpanded ?? panelState.isExpanded) }
         } else { panelState.libraryResize = nil }
         animatePanel(to: frame, duration: isLibrary ? 0.40 : 0.36, curve: isLibrary ? (0.30, 0.05, 0.25, 1) : (0.22, 1, 0.36, 1))
     }
@@ -2033,6 +2324,9 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         frameAnimationTimer?.invalidate()
         let initial = panel.frame
         let initialAlpha = panel.alphaValue
+        // A resize may interrupt presentation (for example, a file hovering over
+        // the notch). Continue its fade instead of freezing a transparent window.
+        let restoresOpacity = fadeIn || initialAlpha < 1
         let start = ProcessInfo.processInfo.systemUptime
         let timer = Timer(timeInterval: 1 / 60, repeats: true) { [weak self] timer in
             MainActor.assumeIsolated {
@@ -2043,7 +2337,7 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
                 self.panel.setFrame(NSRect(x: mix(initial.minX, target.minX), y: mix(initial.minY, target.minY),
                                       width: mix(initial.width, target.width), height: mix(initial.height, target.height)), display: true)
                 if self.panelState.libraryResize != nil { self.panelState.libraryResize?.progress = eased }
-                if fadeIn { self.panel.alphaValue = min(1, mix(initialAlpha, 1)) }
+                if restoresOpacity { self.panel.alphaValue = min(1, mix(initialAlpha, 1)) }
                 if progress >= 1 {
                     timer.invalidate()
                     self.frameAnimationTimer = nil
@@ -2071,6 +2365,8 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
     }
 
     func openSettings() {
+        guard !fileDragActive, fileShelfModel?.busy != true, fileShelfModel?.confirmingClear != true else { return }
+        panelState.fileShelfPreview = false
         guard chatModel?.canLeaveChat() != false else { return }
         guard chatModel?.confirmingDelete != true else { return }
         chatModel?.cancelAuthorization()
@@ -2113,7 +2409,7 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
     private func makeDismissalVisual() {
         closingVisual?.close()
         closingVisual = nil
-        guard panel.isVisible, !panelState.reducesMotion,
+        guard panel.isVisible, panel.alphaValue > 0, !panelState.reducesMotion,
               let view = panel.contentView,
               let bitmap = NSBitmapImageRep(
                 bitmapDataPlanes: nil,
@@ -2139,6 +2435,7 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         imageView.image = image
         imageView.imageScaling = .scaleAxesIndependently
         ghost.contentView = imageView
+        ghost.alphaValue = panel.alphaValue
         ghost.orderFrontRegardless()
         closingVisual = ghost
         NSAnimationContext.runAnimationGroup { context in

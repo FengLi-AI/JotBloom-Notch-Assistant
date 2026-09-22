@@ -6,6 +6,7 @@ import SwiftUI
 enum PanelTab: String, CaseIterable {
     case inspiration
     case clipboard
+    case fileShelf
     case prompts
     case chat
     case inspirationLibrary
@@ -23,6 +24,7 @@ final class PanelViewState: ObservableObject {
     private let preferencesStore: PanelPreferencesStore
     @Published var preferences: PanelPreferences { didSet { preferencesStore.save(preferences) } }
     @Published private(set) var isSettingsOpen = false
+    @Published var fileShelfPreview = false
     @Published var isPromptEditorOpen = false
     @Published var settingsSection = "general"
     @Published private(set) var keyboardNavigation = false
@@ -82,6 +84,7 @@ final class PanelViewState: ObservableObject {
     private func setExpanded(_ value: Bool) {
         isExpanded = value
     }
+    @Published private(set) var hasPhysicalNotch = false
     @Published private(set) var notchHeight: CGFloat = NSStatusBar.system.thickness
     @Published private(set) var notchWidth: CGFloat = PanelGeometry.fallbackNotchWidth
     @Published private(set) var inputHeight: CGFloat = PanelGeometry.referenceInspirationInputHeight
@@ -91,13 +94,14 @@ final class PanelViewState: ObservableObject {
     @Published private(set) var inspirationDetailOrigin: InspirationDetailOrigin?
 
     func update(metrics: ScreenMetrics) {
+        hasPhysicalNotch = PanelGeometry.physicalNotchFrame(for: metrics) != nil
         notchHeight = PanelGeometry.notchHeight(for: metrics)
         notchWidth = PanelGeometry.notchWidth(for: metrics)
         inputHeight = PanelGeometry.inspirationInputHeight(for: metrics)
     }
 
     func toggleExpansion() {
-        guard !isSettingsOpen else { return }
+        guard !isSettingsOpen || fileShelfPreview else { return }
         setExpanded(!isExpanded)
     }
 
@@ -106,7 +110,7 @@ final class PanelViewState: ObservableObject {
     }
 
     func collapse() {
-        guard !isSettingsOpen else { return }
+        guard !isSettingsOpen || fileShelfPreview else { return }
         setExpanded(false)
     }
 

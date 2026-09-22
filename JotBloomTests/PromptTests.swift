@@ -205,7 +205,7 @@ final class PromptTests: XCTestCase {
         try old.execute("PRAGMA journal_mode=WAL; INSERT INTO drafts(kind,content,updated_at_utc_ms) VALUES ('inspiration','WAL草稿',1)", operation: "fixture_wal")
         let upgraded = try JotBloomStore(dataDirectoryURL: oldDir)
         defer { upgraded.close() }
-        XCTAssertEqual(try upgraded.schemaVersionSynchronously(), 7)
+        XCTAssertEqual(try upgraded.schemaVersionSynchronously(), DatabaseMigrator.currentVersion)
         let backup = try SQLiteConnection(databaseURL: url.appendingPathExtension("bak-v2"), readOnly: true)
         defer { backup.close() }
         XCTAssertEqual(try backup.userVersion(), 2)

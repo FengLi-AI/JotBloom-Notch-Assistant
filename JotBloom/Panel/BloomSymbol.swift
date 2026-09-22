@@ -42,10 +42,14 @@ struct BloomSymbol: View {
         "moon": "moon"
     ]
     var body: some View {
-        BloomIconPath(name: Self.aliases[name] ?? name)
-            .stroke(style: StrokeStyle(lineWidth: size * 1.8 / 24, lineCap: .round, lineJoin: .round))
-            .frame(width: size, height: size)
-            .accessibilityHidden(true)
+        Group {
+            if ["film", "waveform", "archivebox", "doc"].contains(name) {
+                Image(systemName: name).font(.system(size: size, weight: .regular))
+            } else {
+                BloomIconPath(name: Self.aliases[name] ?? name)
+                    .stroke(style: StrokeStyle(lineWidth: size * 1.8 / 24, lineCap: .round, lineJoin: .round))
+            }
+        }.frame(width: size, height: size).accessibilityHidden(true)
     }
 }
 private struct BloomIconPath: Shape {

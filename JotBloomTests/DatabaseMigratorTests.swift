@@ -14,7 +14,7 @@ final class DatabaseMigratorTests: XCTestCase {
 
         try DatabaseMigrator.bootstrap(connection)
 
-        XCTAssertEqual(try connection.userVersion(), 7)
+        XCTAssertEqual(try connection.userVersion(), DatabaseMigrator.currentVersion)
         let statement = try connection.prepare(
             """
             SELECT type, name
@@ -45,6 +45,7 @@ final class DatabaseMigratorTests: XCTestCase {
                 "table:chat_sessions",
                 "table:clipboard_items",
                 "table:drafts",
+                "table:file_shelf",
                 "table:inspirations",
                 "table:prompts",
                 "trigger:inspiration_lifecycle",
@@ -61,13 +62,13 @@ final class DatabaseMigratorTests: XCTestCase {
             DataDirectoryResolver.databaseFileName
         )
         let connection = try SQLiteConnection(databaseURL: databaseURL)
-        try connection.setUserVersion(8)
+        try connection.setUserVersion(DatabaseMigrator.currentVersion + 1)
         connection.close()
 
         XCTAssertThrowsError(try JotBloomStore(dataDirectoryURL: directory)) { error in
             XCTAssertEqual(
                 error as? PersistenceError,
-        .unsupportedSchema(found: 8, supported: 7)
+        .unsupportedSchema(found: DatabaseMigrator.currentVersion + 1, supported: DatabaseMigrator.currentVersion)
             )
         }
     }
@@ -185,7 +186,7 @@ final class DatabaseMigratorTests: XCTestCase {
         connection.close()
 
         let store = try JotBloomStore(dataDirectoryURL: directory)
-        XCTAssertEqual(try store.schemaVersionSynchronously(), 7)
+        XCTAssertEqual(try store.schemaVersionSynchronously(), DatabaseMigrator.currentVersion)
         XCTAssertEqual(
             try store.listRecentInspirationsSynchronously().first?.body,
             "迁移标题\n迁移正文"

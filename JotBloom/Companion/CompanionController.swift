@@ -27,6 +27,7 @@ final class JotBloomCompanionExtension: NSObject, ApplicationExtending {
 #endif
     }
     func panelVisibilityDidChange(_ visible: Bool) { controller?.panelChanged(visible) }
+    func captureFeedback(_ event: CaptureFeedbackEvent) { controller?.captureFeedback(event) }
     func openSettings() { controller?.openSettings() }
     func makeHotZoneView(onActivate: @escaping () -> Void) -> NSView? {
         controller?.makeDropView(onActivate: onActivate)
@@ -235,6 +236,17 @@ final class CompanionController: NSObject, ObservableObject {
     func panelChanged(_ visible: Bool) {
         engine?.action("panel", visible)
         refreshCapture()
+        if timer != nil { setInterval(1.0 / 60) }
+    }
+
+    func captureFeedback(_ event: CaptureFeedbackEvent) {
+        guard enabled else { return }
+        switch event {
+        case .hovering(let value): engine?.action("hovering", value)
+        case .reserve: engine?.action("reserve")
+        case .release: engine?.action("release")
+        case .received: receiveEvent("receive")
+        }
         if timer != nil { setInterval(1.0 / 60) }
     }
 

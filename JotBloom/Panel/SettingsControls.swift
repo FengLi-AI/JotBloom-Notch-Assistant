@@ -53,6 +53,8 @@ struct SettingsControls: View {
                 note("⌘Space 通常用于 Spotlight，⌃Space 通常用于切换输入法，系统可能先接收它们。录制时如无完整反馈，请换一组；注册失败会保留旧快捷键。")
             }
             card {
+                Toggle("文件拖入中转站", isOn: Binding(get: { model.value.fileShelfEnabled }, set: model.setFileShelfEnabled))
+                note("将本地文件拖到刘海或中转站，只保存引用，不复制原文件。")
                 Toggle("菜单栏显示图标", isOn: Binding(get: { model.value.showMenuBarIcon }, set: model.setMenuVisible))
                 note("图标太多看不到时，用 \(model.value.shortcut.label) 呼出，再用齿轮进入设置；⌘Q 可退出。")
             }

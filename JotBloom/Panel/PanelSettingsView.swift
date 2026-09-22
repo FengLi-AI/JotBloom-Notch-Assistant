@@ -81,7 +81,7 @@ struct PanelSettingsView: View {
         case "extensions":
             if let module = extensions.module { module.settingsView }
         case "tabs":
-            heading("顶部标签", "调整两侧排列；⌘1–6 跟随位置变化。未开放的标签仍保留位置。")
+            heading("顶部标签", "调整两侧排列；⌘1–6 跟随位置变化。搜索和设置为固定工具按钮。")
             VStack(spacing: 5) {
                 ForEach(Array(state.preferences.order.enumerated()), id: \.element) { index, slot in
                     HStack(spacing: 10) {
@@ -203,7 +203,7 @@ struct PanelSettingsView: View {
             Text("打开时的默认标签").font(BloomTypography.font(13, role: .label))
             Spacer(minLength: 0)
             Picker("打开时的默认标签", selection: $state.preferences.defaultSlot) {
-                ForEach(state.preferences.order.filter(\.isAvailable), id: \.self) { slot in
+                ForEach((state.preferences.order + [.globalSearch]).filter(\.isAvailable), id: \.self) { slot in
                     Text(slot.title).tag(slot)
                 }
             }.labelsHidden().font(BloomTypography.font(12, role: .label)).frame(width: 130).offset(y: -2)

@@ -39,7 +39,7 @@ struct ClipboardHistoryRow: View {
                     preview.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
                     .contentShape(Rectangle())
-            }.buttonStyle(.plain).disabled(isImageUnavailable)
+            }.buttonStyle(BloomLibraryPressStyle()).disabled(isImageUnavailable)
                 .overlay(BloomSecondaryClick { if !isImageUnavailable { onSelect(); onCopyWithoutCollapse() } })
                 .help(primaryText + "\n" + SavedTime.text(item.copiedAtUTCms))
             HStack(spacing: 2) {
@@ -65,7 +65,7 @@ struct ClipboardHistoryRow: View {
                 }
             }.frame(height: actionSize)
         }.padding(compactSmall ? 6 : 8).frame(height: cardHeight)
-            .modifier(BloomLibraryCard(selected: isSelected, hovered: isHovering))
+            .modifier(BloomLibraryCard(selected: isSelected, hovered: isHovering, selectionStyle: .interaction))
             .onHover { isHovering = $0 }
             .bloomMeasure("clipboardCard.\(item.id)")
             .accessibilityElement(children: .contain)

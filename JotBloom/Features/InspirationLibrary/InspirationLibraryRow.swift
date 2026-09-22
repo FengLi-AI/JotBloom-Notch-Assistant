@@ -47,7 +47,7 @@ struct InspirationLibraryRow: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(BloomLibraryPressStyle())
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .help(inspiration.title.isEmpty ? "无标题" : inspiration.title)
             .accessibilityLabel(accessibilityLabel)
@@ -61,7 +61,7 @@ struct InspirationLibraryRow: View {
             .padding(.trailing, 6)
         }
         .frame(height: rowHeight)
-        .modifier(BloomLibraryCard(selected: isSelected, hovered: isHovering))
+        .modifier(BloomLibraryCard(selected: isSelected, hovered: isHovering, selectionStyle: .interaction))
         .bloomMeasure("libraryCard.\(inspiration.id)")
         .contentShape(Rectangle())
         .onHover { isHovering = $0 }

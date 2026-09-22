@@ -15,6 +15,11 @@ struct ApplicationExtensionContext {
 }
 
 @MainActor
+enum CaptureFeedbackEvent {
+    case hovering(Bool), reserve, release, received
+}
+
+@MainActor
 protocol ApplicationExtending: AnyObject {
     init()
     var settingsTitle: String { get }
@@ -23,10 +28,12 @@ protocol ApplicationExtending: AnyObject {
     func panelVisibilityDidChange(_ visible: Bool)
     func stop()
     func makeHotZoneView(onActivate: @escaping () -> Void) -> NSView?
+    func captureFeedback(_ event: CaptureFeedbackEvent)
 }
 
 extension ApplicationExtending {
     func makeHotZoneView(onActivate: @escaping () -> Void) -> NSView? { nil }
+    func captureFeedback(_ event: CaptureFeedbackEvent) {}
 }
 
 @MainActor

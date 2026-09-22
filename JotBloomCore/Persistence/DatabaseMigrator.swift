@@ -2,7 +2,7 @@ import Foundation
 import SQLite3
 
 public enum DatabaseMigrator {
-    public static let currentVersion: Int32 = 7
+    public static let currentVersion: Int32 = 8
 
     static func preflight(_ connection: SQLiteConnection) throws -> Int32 {
         try mapCorruption {
@@ -35,6 +35,8 @@ public enum DatabaseMigrator {
                 try validateVersionSix(connection)
             case 7:
                 try validateVersionSeven(connection)
+            case 8:
+                try validateVersionEight(connection)
             default:
                 throw PersistenceError.invalidSchema(object: "migration_path")
             }
@@ -76,6 +78,8 @@ public enum DatabaseMigrator {
                 try validateVersionSix(connection)
             case 7:
                 try validateVersionSeven(connection)
+            case 8:
+                try validateVersionEight(connection)
             default:
                 throw PersistenceError.invalidSchema(object: "migration_path")
             }
@@ -83,7 +87,18 @@ public enum DatabaseMigrator {
             if version < 5 { try migrateVersionFourToFive(connection) }
             if version < 6 { try migrateVersionFiveToSix(connection) }
             if version < 7 { try migrateVersionSixToSeven(connection) }
+            if version < 8 {
+                try connection.transaction {
+                    try connection.execute("CREATE TABLE file_shelf(id TEXT PRIMARY KEY NOT NULL, payload TEXT NOT NULL, sort_order INTEGER NOT NULL); PRAGMA user_version=8;", operation: "migrate_v8_file_shelf")
+                    try validateVersionEight(connection)
+                }
+            }
         }
+    }
+
+    private static func validateVersionEight(_ db: SQLiteConnection) throws {
+        try validateVersionSeven(db)
+        _ = try db.prepare("SELECT id,payload,sort_order FROM file_shelf LIMIT 0", operation: "validate_file_shelf")
     }
 
     static func migrateVersionFourToFive(_ connection: SQLiteConnection) throws {

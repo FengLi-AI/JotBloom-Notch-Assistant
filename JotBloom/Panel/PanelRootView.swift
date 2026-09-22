@@ -18,6 +18,8 @@ struct PanelRootView: View {
     var settingsModel: SettingsViewModel? = nil
     var promptModel: PromptLibraryViewModel? = nil
     var chatModel: ChatViewModel? = nil
+    var fileShelfModel: FileShelfViewModel? = nil
+    var fileShelfDrag: FileShelfDragController? = nil
     var onChatCopy: (String) -> Bool = { _ in false }
 
     var body: some View {
@@ -30,10 +32,17 @@ struct PanelRootView: View {
             )
                 .frame(height: panelState.notchHeight)
                 .bloomMeasure("chrome")
+                .overlay {
+                    if panelState.hasPhysicalNotch, let fileShelfDrag {
+                        ShelfNotchReceiver(drag: fileShelfDrag).frame(width: panelState.notchWidth)
+                    }
+                }
 
             GeometryReader { content in
             Group {
-            if panelState.isSettingsOpen {
+            if (panelState.fileShelfPreview || (!panelState.isSettingsOpen && panelState.selectedTab == .fileShelf)), let fileShelfModel, let fileShelfDrag {
+                FileShelfView(model: fileShelfModel, drag: fileShelfDrag)
+            } else if panelState.isSettingsOpen {
                 PanelSettingsView(state: panelState, dataDirectory: dataDirectory, onBack: onCloseSettings, model: settingsModel)
             } else if isInspirationDetailVisible {
                 InspirationDetailView(
@@ -49,6 +58,7 @@ struct PanelRootView: View {
                         inputHeight: panelState.inputHeight,
                         isExpanded: panelState.isExpanded
                     )
+                case .fileShelf: EmptyView()
                 case .clipboard:
                     ClipboardHistoryView(viewModel: clipboardViewModel, promptModel: promptModel)
                 case .prompts:
@@ -70,8 +80,8 @@ struct PanelRootView: View {
         }.frame(width: viewport.size.width, height: viewport.size.height, alignment: .top)
         }
         .overlay(alignment: .bottomTrailing) {
-            if !panelState.isSettingsOpen && !(panelState.selectedTab == .prompts && panelState.isPromptEditorOpen) { HStack(spacing: 8) {
-                if panelState.selectedTab == .clipboard && panelState.isExpanded {
+            if panelState.fileShelfPreview || (!panelState.isSettingsOpen && !(panelState.selectedTab == .prompts && panelState.isPromptEditorOpen)) { HStack(spacing: 8) {
+                if !panelState.fileShelfPreview && panelState.selectedTab == .clipboard && panelState.isExpanded {
                     BloomIconButton(title: "清空剪贴板历史", symbol: "trash", destructive: true, raised: true, size: footerControlSize) { clipboardViewModel.confirmingClear = true }
                         .disabled(clipboardViewModel.items.isEmpty || clipboardViewModel.isClearing)
                 }
@@ -116,6 +126,7 @@ struct PanelRootView: View {
         .environment(\.bloomKeyboardNavigation, panelState.keyboardNavigation)
         .onChange(of: panelState.selectedTab) { tab in
             switch tab {
+            case .fileShelf: break
             case .inspiration:
                 inspirationViewModel.requestInputFocus()
             case .clipboard:
@@ -137,9 +148,9 @@ struct PanelRootView: View {
     }
 
     private var usesCompactFooter: Bool {
-        !panelState.isSettingsOpen && !isInspirationDetailVisible &&
-            (panelState.selectedTab == .clipboard || panelState.selectedTab == .inspirationLibrary ||
-                (panelState.selectedTab == .prompts && !panelState.isPromptEditorOpen))
+        panelState.fileShelfPreview || (!panelState.isSettingsOpen && !isInspirationDetailVisible &&
+            (panelState.selectedTab == .fileShelf || panelState.selectedTab == .clipboard || panelState.selectedTab == .inspirationLibrary ||
+                (panelState.selectedTab == .prompts && !panelState.isPromptEditorOpen)))
     }
 
     private var footerControlSize: CGFloat {
@@ -176,4 +187,10 @@ enum BloomExternalLinks {
             return .handled
         }
     }
+}
+
+private struct ShelfNotchReceiver: NSViewRepresentable {
+    let drag: FileShelfDragController
+    func makeNSView(context: Context) -> NotchDropView { let view = NotchDropView(frame: .zero); view.fileShelf = drag; return view }
+    func updateNSView(_ view: NotchDropView, context: Context) { view.fileShelf = drag }
 }

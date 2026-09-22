@@ -199,7 +199,7 @@ final class LibraryOrganizationTests: XCTestCase {
         old.close()
         let upgraded = try JotBloomStore(dataDirectoryURL: fixture)
         defer { upgraded.close() }
-        XCTAssertEqual(try upgraded.schemaVersionSynchronously(), 7)
+        XCTAssertEqual(try upgraded.schemaVersionSynchronously(), DatabaseMigrator.currentVersion)
         let record = try XCTUnwrap(upgraded.listInspirationsPageSynchronously(after: nil, limit: 10).items.first)
         XCTAssertEqual(record.body, "原始记录\n不能丢失"); XCTAssertEqual(record.sortOrder, 100)
         let backup = try SQLiteConnection(databaseURL: URL(fileURLWithPath: url.path + ".bak-v3"), readOnly: true, createIfMissing: false)

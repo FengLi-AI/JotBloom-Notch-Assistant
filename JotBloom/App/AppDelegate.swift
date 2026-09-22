@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var clipboardService: ClipboardService?
     private var clipboardViewModel: ClipboardHistoryViewModel?
     private var globalSearchViewModel: GlobalSearchViewModel?
+    private var fileShelfViewModel: FileShelfViewModel?
     private var promptViewModel: PromptLibraryViewModel?
     private var chatViewModel: ChatViewModel?
     private var promptTitles: PromptTitleCoordinator?
@@ -190,7 +191,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 #if DEBUG
         let isolatedSmokePasteboard = (
-            isStageThreeSmoke || isStageFourSmoke || isStageFiveSmoke || settingsAreIsolated
+            isStageThreeSmoke || isStageFourSmoke || isStageFiveSmoke ||
+                (settingsAreIsolated && ProcessInfo.processInfo.environment["JOTBLOOM_MANUAL_SYSTEM_CLIPBOARD"] != "1")
         )
             ? NSPasteboard(
                 name: NSPasteboard.Name(
@@ -335,6 +337,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         inspirationViewModel.onPromptCreated = created; promptModel.onPromptCreated = created
         self.promptViewModel = promptModel; self.promptTitles = titles
+        let fileShelfModel = FileShelfViewModel(store: store)
+        self.fileShelfViewModel = fileShelfModel
+        fileShelfModel.canMutate = { [weak self, weak settingsModel] in settingsModel?.blocksPanelInteraction != true && self?.terminationRetryScheduled != true }
+        let fileShelfDrag = FileShelfDragController(model: fileShelfModel)
+        fileShelfDrag.enabled = { [weak settingsModel] in settingsModel?.value.fileShelfEnabled == true }
+        fileShelfDrag.allowed = { [weak self, weak settingsModel, weak clipboardViewModel, weak chatModel] in
+            settingsModel?.blocksPanelInteraction != true && self?.terminationRetryScheduled != true
+                && clipboardViewModel?.confirmingClear != true && clipboardViewModel?.isClearing != true
+                && settingsModel?.confirmingClear != true && chatModel?.confirmingDelete != true
+        }
+        Task { await fileShelfModel.load(); await fileShelfModel.refresh() }
         let panelController = PanelController(
             inspirationViewModel: inspirationViewModel,
             clipboardViewModel: clipboardViewModel,
@@ -343,7 +356,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             dataDirectory: dataDirectory,
             settingsModel: settingsModel,
             promptModel: promptModel,
-            chatModel: chatModel
+            chatModel: chatModel,
+            fileShelfModel: fileShelfModel,
+            fileShelfDrag: fileShelfDrag
         )
         inspirationViewModel.sendToChat = { [weak chatModel, weak panelController] text in
             guard let chatModel, panelController?.showChat() == true else { throw ChatError.busy }
@@ -406,6 +421,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard settingsModel?.blocksPanelInteraction != true else { return }
             coordinator?.toggle()
         }
+        hotZoneController.fileShelf = fileShelfDrag
+        fileShelfDrag.onHotZoneRefresh = { [weak hotZoneController] in hotZoneController?.refresh() }
+        fileShelfDrag.reducesMotion = { [weak panelController] in panelController?.reducesShelfMotion ?? true }
+        fileShelfDrag.onExternalHandoff = { [weak coordinator] in coordinator?.hide(restoreFocus: false) }
         coordinator.onVisibilityChanged = { [weak hotZoneController, weak pasteboardMonitor] isVisible in
             hotZoneController?.setPanelVisible(isVisible)
             pasteboardMonitor?.setPanelVisible(isVisible)
@@ -492,6 +511,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 #endif
         pasteboardMonitor.setUserEnabled(appSettings.monitoringEnabled)
         pasteboardMonitor.start()
+#if DEBUG
+        if ProcessInfo.processInfo.environment["JOTBLOOM_MANUAL_SYSTEM_CLIPBOARD"] == "1" {
+            print("JOTBLOOM_MANUAL_CLIPBOARD system=\(isolatedSmokePasteboard == nil) monitoring=\(appSettings.monitoringEnabled)")
+            fflush(stdout)
+        }
+#endif
         if !settingsAreIsolated, !appSettings.onboardingSeen {
             let hasData = (try? store.listRecentInspirationsSynchronously().isEmpty) == false
                 || (try? store.listClipboardItemsSynchronously().isEmpty) == false
@@ -510,10 +535,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if ProcessInfo.processInfo.environment["JOTBLOOM_REVIEW_SMOKE"] == "1" {
                 Task { @MainActor in
                     do {
-                        let checks = try await panelController.debugReviewLifecycleProbe(show: { coordinator.show() }, toggle: { coordinator.toggle() })
+                        let checks: [(String, Bool)]
+                        if ProcessInfo.processInfo.environment["JOTBLOOM_PRESENTATION_SMOKE"] == "1" {
+                            checks = try await panelController.debugPresentationProbe(toggle: { hotZoneController.debugActivate() })
+                        } else {
+                            checks = try await panelController.debugReviewLifecycleProbe(show: { coordinator.show() }, toggle: { coordinator.toggle() })
+                        }
                         for (name, passed) in checks { print("JOTBLOOM_REVIEW \(name)=\(passed)") }
                         fflush(stdout); exit(checks.allSatisfy(\.1) ? 0 : 1)
                     } catch { print("JOTBLOOM_REVIEW error=\(error)"); fflush(stdout); exit(1) }
+                }
+            }
+        }
+        if settingsAreIsolated, let fixturePath = ProcessInfo.processInfo.environment["JOTBLOOM_FILE_SHELF_REVIEW"] {
+            Task { @MainActor in
+                await fileShelfModel.waitForPendingOperations()
+                let files = (try? FileManager.default.contentsOfDirectory(at: URL(fileURLWithPath: fixturePath), includingPropertiesForKeys: nil)) ?? []
+                if fileShelfModel.items.isEmpty { _ = await fileShelfModel.add(files.filter { !$0.lastPathComponent.hasPrefix(".") }.sorted { $0.lastPathComponent < $1.lastPathComponent }) }
+                coordinator.show()
+                panelController.debugShowFileShelf()
+                if ProcessInfo.processInfo.environment["JOTBLOOM_FILE_SHELF_PROBE"] == "1" {
+                    do {
+                        try await Task.sleep(nanoseconds: 400_000_000)
+                        var passed = try await panelController.debugFileShelfProbe(output: URL(fileURLWithPath: fixturePath).deletingLastPathComponent().appendingPathComponent("review"), show: { coordinator.show() })
+                        if ProcessInfo.processInfo.environment["JOTBLOOM_FILE_SHELF_MOTION_PROBE"] == "1" {
+                            for index in 1...12 {
+                                let outcome = try store.upsertClipboardTextSynchronously(text: "动画验收 \(index)：记录想法，然后继续手头的事。", contentType: .text, copiedAtUTCms: Int64(index), sourceApplication: ClipboardSourceApplication(name: "动画测试", bundleIdentifier: "test.motion"))
+                                if case .inserted(let item) = outcome {
+                                    _ = try await store.saveClipboard(id: item.id, to: .prompt, timestamp: Int64(index))
+                                    _ = try await store.saveClipboard(id: item.id, to: .inspiration, timestamp: Int64(index))
+                                }
+                            }
+                            clipboardViewModel.refreshAfterMaintenance(); promptModel.refresh(); inspirationLibraryViewModel.activate()
+                            let motionPassed = try await panelController.debugLibraryMotionProbe(output: URL(fileURLWithPath: fixturePath).deletingLastPathComponent().appendingPathComponent("motion"))
+                            passed = passed && motionPassed
+                        }
+                        exit(passed ? 0 : 1)
+                    } catch { print("FILE_SHELF_REVIEW failed"); fflush(stdout); exit(1) }
                 }
             }
         }
@@ -607,6 +665,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if inspirationViewModel.hasPendingSave
+            || fileShelfViewModel?.busy == true
             || externalInspirationWriter?.hasPendingSave == true
             || !clipboardTerminationPrepared
             || !inspirationLibraryTerminationPrepared {
@@ -629,6 +688,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         pasteboardMonitor?.start()
                         return
                     }
+                    await fileShelfViewModel?.waitForPendingOperations()
                     await inspirationViewModel.waitForPendingSave()
                     await externalInspirationWriter?.drain()
                     guard await promptViewModel?.prepareForMaintenance() != false else {
@@ -761,6 +821,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self, let store, let input = inspirationViewModel, let library = inspirationLibraryViewModel else { throw SettingsError.maintenance }
             capturePermission.setAllowed(false); pasteboardMonitor?.setMaintenancePaused(true)
             defer { restoreCaptureAfterMaintenance() }
+            await fileShelfViewModel?.waitForPendingOperations()
             await externalInspirationWriter?.drain()
             await clipboardCaptureCoordinator?.stopAndDrain()
             guard await chatViewModel?.prepareForMaintenance() != false else { throw SettingsError.migrationFailed }

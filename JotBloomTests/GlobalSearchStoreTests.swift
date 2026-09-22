@@ -150,7 +150,7 @@ final class GlobalSearchStoreTests: XCTestCase {
         XCTAssertEqual(try store.searchAllSynchronously(query: " \n "), .empty)
         _ = try store.searchAllSynchronously(query: "keep")
 
-        XCTAssertEqual(try store.schemaVersionSynchronously(), 7)
+        XCTAssertEqual(try store.schemaVersionSynchronously(), DatabaseMigrator.currentVersion)
         XCTAssertEqual(try store.listRecentInspirationsSynchronously(), before)
     }
 
