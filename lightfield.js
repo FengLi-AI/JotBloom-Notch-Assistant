@@ -18,11 +18,11 @@
   const themeButtons=[...document.querySelectorAll('[data-preview-theme]')];
   async function renderPicture(){
     const ticket=++pictureRevision,f=features[selectedFeature],theme=previewTheme;
-    const src=`assets/1.0.4/${theme}-${f.image}.png`,next=new Image();next.src=src;
+    const src=`assets/1.0.7/${theme}-${f.image}.png`,next=new Image();next.src=src;
     themeButtons.forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.previewTheme===theme)));
     try{await next.decode();}catch{if(ticket===pictureRevision)document.querySelector('#feature-label').textContent='截图加载未完成，请重试';return;}
     if(ticket!==pictureRevision)return;
-    img.src=src;img.alt=`萌生 Mac 1.0.4 ${theme==='light'?'浅色':'深色'} · ${f.label}原生界面截图`;
+    img.src=src;img.alt=`萌生 Mac 1.0.7 ${theme==='light'?'浅色':'深色'} · ${f.label}原生界面截图`;
     document.querySelector('.screenshot-button').dataset.theme=theme;
     document.querySelector('#feature-label').textContent=f.label;
     if(!reduced.matches)img.animate([{opacity:.3},{opacity:1}],{duration:360,easing:'cubic-bezier(.22,1,.36,1)'});
@@ -35,6 +35,7 @@
   tabs.forEach((tab,i)=>{tab.addEventListener('click',()=>select(tab));tab.addEventListener('keydown',e=>{let next;if(e.key==='ArrowRight')next=(i+1)%tabs.length;if(e.key==='ArrowLeft')next=(i+tabs.length-1)%tabs.length;if(e.key==='Home')next=0;if(e.key==='End')next=tabs.length-1;if(next!==undefined){e.preventDefault();select(tabs[next]);tabs[next].focus();}});});
   const imageDialog=document.querySelector('.image-dialog'),message=document.querySelector('.message-dialog');
   function zoom(){imageDialog.querySelector('img').src=img.src;imageDialog.querySelector('img').alt=img.alt;imageDialog.showModal();}document.querySelector('#zoom').addEventListener('click',zoom);document.querySelector('.screenshot-button').addEventListener('click',zoom);
+  document.querySelector('.shelf-preview').addEventListener('click',()=>{const source=document.querySelector('.shelf-preview img');imageDialog.querySelector('img').src=source.src;imageDialog.querySelector('img').alt=source.alt;imageDialog.showModal();});
   // Let the real attachment link start downloading first. No star gate and no
   // claim that the browser has completed a download (not observable cross-origin).
   document.querySelectorAll('[data-download]').forEach(link=>link.addEventListener('click',event=>{if(event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;setTimeout(()=>{if(!message.open)message.showModal();},350);}));
