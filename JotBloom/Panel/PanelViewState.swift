@@ -85,6 +85,7 @@ final class PanelViewState: ObservableObject {
     @Published private(set) var notchHeight: CGFloat = NSStatusBar.system.thickness
     @Published private(set) var notchWidth: CGFloat = PanelGeometry.fallbackNotchWidth
     @Published private(set) var inputHeight: CGFloat = PanelGeometry.referenceInspirationInputHeight
+    @Published var libraryResize: LibraryLayoutTransition?
     @Published private(set) var isExpanded = false
     @Published private(set) var selectedTab: PanelTab = .inspiration
     @Published private(set) var inspirationDetailOrigin: InspirationDetailOrigin?

@@ -19,6 +19,28 @@ public struct ClipboardFeedback: Equatable, Sendable {
     }
 }
 
+/// Calendar-based filters use half-open intervals, including across DST and year boundaries.
+public enum ClipboardDateFilter: Equatable {
+    case all, today, yesterday
+    case month(Date), day(Date)
+
+    public func contains(_ milliseconds: Int64, now: Date = Date(), calendar: Calendar = .current) -> Bool {
+        let interval: DateInterval?
+        switch self {
+        case .all: return true
+        case .today: interval = calendar.dateInterval(of: .day, for: now)
+        case .yesterday:
+            interval = calendar.date(byAdding: .day, value: -1, to: now)
+                .flatMap { calendar.dateInterval(of: .day, for: $0) }
+        case .month(let date): interval = calendar.dateInterval(of: .month, for: date)
+        case .day(let date): interval = calendar.dateInterval(of: .day, for: date)
+        }
+        guard let interval else { return false }
+        let date = Date(timeIntervalSince1970: Double(milliseconds) / 1000)
+        return date >= interval.start && date < interval.end
+    }
+}
+
 @MainActor
 public final class ClipboardHistoryViewModel: ObservableObject {
     @Published public var confirmingClear = false {
@@ -48,6 +70,21 @@ public final class ClipboardHistoryViewModel: ObservableObject {
         }
     }
     @Published public private(set) var items: [ClipboardItem] = []
+    @Published public private(set) var dateFilter: ClipboardDateFilter = .all
+    public var visibleItems: [ClipboardItem] {
+        let now = Date(timeIntervalSince1970: Double(nowUTCms()) / 1000)
+        return items.filter { dateFilter.contains($0.copiedAtUTCms, now: now) }
+    }
+    public func filterDate(_ filter: ClipboardDateFilter) {
+        dateFilter = filter
+        selectedID = visibleItems.first?.id
+        requestListFocus()
+    }
+    public func reconcileDateSelection() {
+        if !visibleItems.contains(where: { $0.id == selectedID }) {
+            selectedID = visibleItems.first?.id
+        }
+    }
     @Published public private(set) var thumbnailURLs: [Int64: URL] = [:]
     @Published public private(set) var unavailableImageIDs: Set<Int64> = []
     @Published public private(set) var selectedID: Int64?
@@ -152,11 +189,16 @@ public final class ClipboardHistoryViewModel: ObservableObject {
     }
 
     public func select(_ identifier: Int64) {
-        guard items.contains(where: { $0.id == identifier }) else { return }
+        guard visibleItems.contains(where: { $0.id == identifier }) else { return }
         selectedID = identifier
     }
 
+    /// Updated by the rendered grid whenever its available width changes.
+    public var gridColumnCount = 1
+    public func moveGridSelection(rows: Int) { moveSelection(by: rows * max(1, gridColumnCount)) }
+
     public func moveSelection(by offset: Int) {
+        let items = visibleItems
         guard !items.isEmpty else {
             selectedID = nil
             return
@@ -184,6 +226,7 @@ public final class ClipboardHistoryViewModel: ObservableObject {
     }
 
     public func copySelected(collapseAfterCopy: Bool) {
+        reconcileDateSelection()
         guard let selectedID else { return }
         copy(itemID: selectedID, collapseAfterCopy: collapseAfterCopy)
     }
@@ -250,6 +293,7 @@ public final class ClipboardHistoryViewModel: ObservableObject {
     }
 
     public func deleteSelected() {
+        reconcileDateSelection()
         guard let selectedID else { return }
         delete(itemID: selectedID)
     }
@@ -282,6 +326,7 @@ public final class ClipboardHistoryViewModel: ObservableObject {
                 thumbnailURLs.removeValue(forKey: deleted.id)
                 unavailableImageIDs.remove(deleted.id)
                 selectedID = selectionAfterDeletion(at: originalIndex)
+                reconcileDateSelection()
                 pendingDeletion = deleted
                 feedback = ClipboardFeedback(kind: .deleted, message: "已删除")
                 scheduleUndoExpiry(for: deleted)
@@ -318,6 +363,7 @@ public final class ClipboardHistoryViewModel: ObservableObject {
                 guard revision == mutationRevision else { return }
                 await apply(loaded, preserveSelection: false)
                 selectedID = restored.id
+                reconcileDateSelection()
             } catch {
                 await service.finalizeDeletion(item)
                 guard revision == mutationRevision else { return }
@@ -410,6 +456,8 @@ public final class ClipboardHistoryViewModel: ObservableObject {
         } else {
             selectedID = loaded.first?.id
         }
+
+        reconcileDateSelection()
 
         var urls: [Int64: URL] = [:]
         var unavailable = Set<Int64>()

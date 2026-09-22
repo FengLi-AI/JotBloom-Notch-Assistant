@@ -520,6 +520,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if ProcessInfo.processInfo.environment["JOTBLOOM_UI_WALKTHROUGH"] == "1", settingsAreIsolated {
             panelController.debugSetAutomaticDismissalEnabled(false)
             coordinator.show()
+            if ProcessInfo.processInfo.environment["JOTBLOOM_MOTION_REVIEW"] == "1",
+               let path = ProcessInfo.processInfo.environment["JOTBLOOM_DEBUG_DATA_DIRECTORY"] {
+                Task { @MainActor in
+                    do { try await panelController.debugLibraryMotionProbe(output: URL(fileURLWithPath: path).appendingPathComponent("motion-review")) }
+                    catch { print("MOTION error=\(error)"); fflush(stdout) }
+                }
+            }
+            if ProcessInfo.processInfo.environment["JOTBLOOM_ADAPTIVE_REVIEW"] == "1",
+               let path = ProcessInfo.processInfo.environment["JOTBLOOM_DEBUG_DATA_DIRECTORY"] {
+                Task { @MainActor in
+                    do { try await panelController.debugAdaptiveLibraryProbe(output: URL(fileURLWithPath: path).appendingPathComponent("adaptive-review")) }
+                    catch { print("ADAPTIVE error=\(error)"); fflush(stdout) }
+                }
+            }
         }
         if let stageFiveSmokeBootstrap,
            let isolatedSmokePasteboard {

@@ -72,16 +72,16 @@ struct PanelRootView: View {
         .overlay(alignment: .bottomTrailing) {
             if !panelState.isSettingsOpen && !(panelState.selectedTab == .prompts && panelState.isPromptEditorOpen) { HStack(spacing: 8) {
                 if panelState.selectedTab == .clipboard && panelState.isExpanded {
-                    BloomIconButton(title: "清空剪贴板历史", symbol: "trash", destructive: true, raised: true) { clipboardViewModel.confirmingClear = true }
+                    BloomIconButton(title: "清空剪贴板历史", symbol: "trash", destructive: true, raised: true, size: footerControlSize) { clipboardViewModel.confirmingClear = true }
                         .disabled(clipboardViewModel.items.isEmpty || clipboardViewModel.isClearing)
                 }
-                BloomIconButton(title: panelState.isExpanded ? "收回面板" : "展开面板", symbol: panelState.isExpanded ? "chevron.up" : "chevron.down", raised: true) {
+                BloomIconButton(title: panelState.isExpanded ? "收回面板" : "展开面板", symbol: panelState.isExpanded ? "chevron.up" : "chevron.down", raised: true, size: footerControlSize) {
                 panelState.toggleExpansion()
             }
             }
-            .padding(.trailing, 16)
+            .padding(.trailing, usesCompactFooter ? BloomListLayout.horizontalInset : 16)
             .bloomMeasure("panelFooterControls")
-            .padding(.bottom, 16)
+            .padding(.bottom, usesCompactFooter ? BloomListLayout.verticalInset + 1 : 16)
             }
         }
         .disabled(clipboardViewModel.confirmingClear)
@@ -111,6 +111,7 @@ struct PanelRootView: View {
         .environment(\.bloomVisible, panelState.isPresented)
         .environment(\.openURL, BloomExternalLinks.action(using: systemOpenURL, onOpened: onExternalLinkOpened))
         .environment(\.bloomExpanded, panelState.isExpanded)
+        .environment(\.bloomLibraryResize, panelState.libraryResize)
         .environment(\.bloomReduceMotion, panelState.reducesMotion)
         .environment(\.bloomKeyboardNavigation, panelState.keyboardNavigation)
         .onChange(of: panelState.selectedTab) { tab in
@@ -133,6 +134,16 @@ struct PanelRootView: View {
                 }
             }
         }
+    }
+
+    private var usesCompactFooter: Bool {
+        !panelState.isSettingsOpen && !isInspirationDetailVisible &&
+            (panelState.selectedTab == .clipboard || panelState.selectedTab == .inspirationLibrary ||
+                (panelState.selectedTab == .prompts && !panelState.isPromptEditorOpen))
+    }
+
+    private var footerControlSize: CGFloat {
+        usesCompactFooter ? BloomListLayout.controlSize : BloomTheme.buttonHeight
     }
 
     private var detailBackDestinationName: String {

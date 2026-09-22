@@ -11,6 +11,9 @@ struct InspirationLibraryRow: View {
     var drag: BloomLibraryDrag? = nil
     var onMove: ((Int64, Int64, Bool) -> Void)? = nil
 
+    var rowHeight: CGFloat = 60
+    var compact = true
+
     @Environment(\.bloomExpanded) private var expanded
     @Environment(\.bloomReduceMotion) private var reduceMotion
     @State private var isHovering = false
@@ -24,24 +27,23 @@ struct InspirationLibraryRow: View {
                 HStack(spacing: 8) {
                     if let drag, let onMove { BloomDragHandle(id: inspiration.id, drag: drag, move: onMove) }
                     VStack(alignment: .leading, spacing: 4) {
-                    Text(displayTitle)
-                        .modifier(BloomType(size: expanded ? 14 : 12))
-                        .foregroundColor(titleColor)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Text(inspiration.body.isEmpty ? "留住一个念头" : inspiration.body)
-                        .font(BloomTypography.font(11)).foregroundStyle(BloomTheme.muted).lineLimit(1)
+                        HStack(spacing: 8) {
+                            Text(displayTitle)
+                                .font(BloomTypography.font(13, role: .label))
+                                .foregroundColor(titleColor).lineLimit(1)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            Text(BloomListLayout.time(inspiration.createdAtUTCms))
+                                .font(BloomTypography.font(10)).foregroundStyle(BloomTheme.muted)
+                                .fixedSize().help(SavedTime.text(inspiration.createdAtUTCms))
+                        }
+                        if !summary.isEmpty {
+                            Text(summary).font(BloomTypography.font(11)).foregroundStyle(BloomTheme.muted)
+                                .lineLimit(compact ? 1 : 2).frame(maxWidth: .infinity, alignment: .leading)
+                        }
                     }
-
-                    Text(SavedTime.text(inspiration.createdAtUTCms))
-                    .font(BloomTypography.font(11))
-                    .foregroundColor(secondaryColor)
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
                 }
-                .padding(.leading, 14)
-                .padding(.trailing, 48)
+                .padding(.leading, 10)
+                .padding(.trailing, 40)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
             }
@@ -51,32 +53,37 @@ struct InspirationLibraryRow: View {
             .accessibilityLabel(accessibilityLabel)
             .accessibilityAddTraits(isSelected ? [.isSelected] : [])
 
-            BloomIconButton(title: "删除灵感", symbol: "trash", destructive: true, helpText: "删除灵感，3 秒内可撤销", action: onDelete)
-            .padding(.trailing, 8)
+            BloomRowMenu(title: "灵感的更多操作") {
+                Button("打开灵感") { onSelect(); onOpen() }
+                Divider()
+                Button("删除灵感", role: .destructive, action: onDelete)
+            }
+            .padding(.trailing, 6)
         }
-        .frame(height: expanded ? 58 : 48)
-        .background {
-            RoundedRectangle(cornerRadius: expanded ? 20 : 14, style: .continuous)
-                .fill(backgroundColor)
-                .padding(.horizontal, 1)
-        }
-        .animation(reduceMotion ? nil : BloomTheme.layoutAnimation, value: expanded)
+        .frame(height: rowHeight)
+        .modifier(BloomLibraryCard(selected: isSelected, hovered: isHovering))
+        .bloomMeasure("libraryCard.\(inspiration.id)")
         .contentShape(Rectangle())
         .onHover { isHovering = $0 }
     }
 
-    private var displayTitle: String {
-        inspiration.title.isEmpty ? "无标题" : inspiration.title
+    /// Avoid showing an automatically generated title twice; stored text stays intact.
+    private var summary: String {
+        var preview = String(inspiration.body.prefix(240)).trimmingCharacters(in: .whitespacesAndNewlines)
+        let separators = CharacterSet.whitespacesAndNewlines.union(.punctuationCharacters)
+        let title = inspiration.title.trimmingCharacters(in: separators)
+        guard !title.isEmpty else { return preview }
+        // The saved body can contain both its original heading and the same first sentence.
+        while preview.hasPrefix(title) {
+            let rest = String(preview.dropFirst(title.count))
+            guard rest.isEmpty || rest.unicodeScalars.first.map({ separators.contains($0) }) == true else { break }
+            preview = rest.trimmingCharacters(in: separators)
+        }
+        return preview
     }
 
-    private var backgroundColor: Color {
-        if isSelected {
-            return BloomTheme.selected
-        }
-        if isHovering {
-            return BloomTheme.well
-        }
-        return .clear
+    private var displayTitle: String {
+        inspiration.title.isEmpty ? "无标题" : inspiration.title
     }
 
     private var titleColor: Color {
@@ -86,26 +93,8 @@ struct InspirationLibraryRow: View {
         return inspiration.title.isEmpty ? BloomTheme.muted : BloomTheme.text
     }
 
-    private var secondaryColor: Color {
-        isSelected
-            ? BloomTheme.text
-            : BloomTheme.muted
-    }
-
     private var accessibilityLabel: String {
         "\(displayTitle)，保存于 \(SavedTime.text(inspiration.createdAtUTCms))"
     }
 
-    private static let relativeFormatter: RelativeDateTimeFormatter = {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .short
-        return formatter
-    }()
-
-    private static let fullDateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter
-    }()
 }

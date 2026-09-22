@@ -251,6 +251,60 @@ final class ClipboardHistoryViewModelTests: XCTestCase {
         XCTAssertFalse(context.viewModel.canUndo)
     }
 
+    func testDateFilterUsesLocalDayAndExcludesNextMonthBoundary() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/Los_Angeles")!
+        let day = calendar.date(from: DateComponents(year: 2026, month: 3, day: 8))!
+        let nextDay = calendar.date(byAdding: .day, value: 1, to: day)!
+        func ms(_ date: Date) -> Int64 { Int64(date.timeIntervalSince1970 * 1000) }
+        XCTAssertEqual(nextDay.timeIntervalSince(day), 23 * 3600)
+        XCTAssertTrue(ClipboardDateFilter.day(day).contains(ms(day), calendar: calendar))
+        XCTAssertTrue(ClipboardDateFilter.day(day).contains(ms(nextDay) - 1, calendar: calendar))
+        XCTAssertFalse(ClipboardDateFilter.day(day).contains(ms(nextDay), calendar: calendar))
+        XCTAssertTrue(ClipboardDateFilter.yesterday.contains(ms(day), now: nextDay, calendar: calendar))
+        let january = calendar.date(from: DateComponents(year: 2027, month: 1, day: 1))!
+        XCTAssertFalse(ClipboardDateFilter.month(january.addingTimeInterval(-1)).contains(ms(january), calendar: calendar))
+    }
+
+    func testDateSelectionNeverCopiesHiddenItemsAfterFilterRefreshOrUndo() async throws {
+        let day = Calendar.current.startOfDay(for: Date(timeIntervalSince1970: 1_790_000_000))
+        let timestamp = Int64(day.timeIntervalSince1970 * 1000)
+        let items = [
+            ClipboardTestFixtures.item(id: 3, text: "next day", copiedAt: timestamp + 172_800_000),
+            ClipboardTestFixtures.item(id: 2, text: "visible newest", copiedAt: timestamp + 2000),
+            ClipboardTestFixtures.item(id: 1, text: "visible oldest", copiedAt: timestamp + 1000)
+        ]
+        let context = makeContext(items: items)
+        let model = context.viewModel
+        model.start()
+        try await waitUntil { model.isReady }
+        model.filterDate(.day(day))
+        XCTAssertEqual(model.visibleItems.map(\.id), [2, 1])
+        XCTAssertEqual(model.selectedID, 2)
+        model.select(3)
+        XCTAssertEqual(model.selectedID, 2)
+        model.moveSelection(by: 3)
+        XCTAssertEqual(model.selectedID, 1)
+        model.copySelected(collapseAfterCopy: false)
+        try await waitUntil { !model.hasPendingOperation }
+        XCTAssertEqual(context.writer.text, "visible oldest")
+        model.deleteSelected()
+        try await waitUntil { model.canUndo && !model.hasPendingOperation }
+        XCTAssertEqual(model.selectedID, 2)
+        model.filterDate(.day(day.addingTimeInterval(-172800)))
+        XCTAssertNil(model.selectedID)
+        model.undoDeletion()
+        try await waitUntil { !model.hasPendingOperation }
+        XCTAssertNil(model.selectedID)
+        XCTAssertTrue(model.visibleItems.isEmpty)
+        model.refreshAfterMaintenance()
+        try await waitUntil { !model.hasPendingOperation }
+        XCTAssertNil(model.selectedID)
+        model.filterDate(.all)
+        XCTAssertEqual(model.visibleItems.count, 3)
+        await model.prepareForTermination()
+    }
+
     private func makeContext(
         items: [ClipboardItem],
         imageData: Data = Data([9]),

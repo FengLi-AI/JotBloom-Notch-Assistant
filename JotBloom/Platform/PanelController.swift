@@ -157,7 +157,7 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
             var previous = panel.frame.height
             var monotonic = true, topFixed = true, chromeFixed = true, headerFixed = true, shadowFollows = true
             var measuredHeaderFrames = 0
-            let expectedHeaderY = panelState.notchHeight + (name.contains("settings") ? 16 : 12)
+            let expectedHeaderY = panelState.notchHeight + (name.contains("settings") ? 16 : BloomListLayout.verticalInset)
             action()
             for index in 0..<26 {
                 try await Task.sleep(nanoseconds: 16_000_000)
@@ -168,7 +168,7 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
                 monotonic = monotonic && (expanding ? height >= previous - 0.5 : height <= previous + 0.5)
                 topFixed = topFixed && abs(panel.frame.maxY - top) < 0.5
                 let chromeY = BloomLayoutDiagnostics.frames["chrome"]?.minY ?? -999
-                let headerY = BloomLayoutDiagnostics.frames[name.contains("settings") ? "settingsHeader" : "libraryHeader"]?.minY ?? -999
+                let headerY = BloomLayoutDiagnostics.frames[name.contains("settings") ? "settingsHeader" : "libraryViewport"]?.minY ?? -999
                 chromeFixed = chromeFixed && abs(chromeY) < 0.5
                 // A newly mounted SwiftUI header publishes its first measurement asynchronously.
                 // Missing data is not a position; still require at least 25 of the 26 samples.
@@ -231,30 +231,21 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
             return count > 0 ? total / count : -1000
         }
         requestSelectTab(.inspirationLibrary); panelState.expand(); inspirationLibraryViewModel.filter(nil); try await pause()
-        let region = CGRect(x: 20, y: 78, width: 74, height: 350)
+        let region = CGRect(x: 16, y: panelState.notchHeight + 12, width: 104, height: 186)
         let start = try blueCenter("ui13-category-start", region: region)
-        inspirationLibraryViewModel.filter(.product)
-        var positions: [Double] = []
-        for index in 0..<5 {
-            try await pause(60)
-            positions.append(try blueCenter("ui13-category-motion-\(index)", region: region))
-        }
-        try await pause()
+        inspirationLibraryViewModel.filter(.product); try await pause()
         let end = try blueCenter("ui13-category-end", region: region)
-        checks.append(("ui13_category_visible_intermediate_positions", positions.filter { $0 > start + 5 && $0 < end - 5 }.count >= 2))
-        checks.append(("ui13_category_reaches_product", end - start > 190 && end - start < 230))
+        checks.append(("ui13_category_reaches_product", abs(end - start - 108) < 4))
         inspirationLibraryViewModel.filter(.article); try await pause(100)
         inspirationLibraryViewModel.filter(.idea); try await pause()
         checks.append(("ui13_rapid_filter_keeps_latest_state", inspirationLibraryViewModel.filterCategory == .idea))
         try debugCapturePromptPanel(to: output.appendingPathComponent("ui13-category-interrupted-end.png"))
         requestSelectTab(.prompts); promptModel?.favoritesOnly = false; try await pause()
-        let promptRegion = CGRect(x: 16, y: 80, width: 175, height: 44)
-        let promptStart = try blueCenter("ui13-prompt-start", region: promptRegion, horizontal: true)
-        promptModel?.favoritesOnly = true; try await pause(140)
-        let promptMiddle = try blueCenter("ui13-prompt-middle", region: promptRegion, horizontal: true)
-        try await pause()
-        let promptEnd = try blueCenter("ui13-prompt-end", region: promptRegion, horizontal: true)
-        checks.append(("ui13_prompt_selection_slides", promptMiddle > promptStart + 3 && promptMiddle < promptEnd - 3 && abs(promptEnd - promptStart - 82) < 4))
+        let promptRegion = CGRect(x: 16, y: panelState.notchHeight + 36, width: 104, height: 76)
+        let promptStart = try blueCenter("ui13-prompt-start", region: promptRegion)
+        promptModel?.favoritesOnly = true; try await pause()
+        let promptEnd = try blueCenter("ui13-prompt-end", region: promptRegion)
+        checks.append(("ui13_prompt_sidebar_selects_favorites", abs(promptEnd - promptStart - 36) < 4))
         requestSelectTab(.globalSearch); globalSearchViewModel.selectScope(.all); try await pause()
         let searchRegion = CGRect(x: 16, y: 82, width: 408, height: 33)
         let searchStart = try blueCenter("ui13-search-start", region: searchRegion, horizontal: true)
@@ -316,7 +307,7 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         try debugCapturePromptPanel(to: output.appendingPathComponent("ui13-about.png"))
         closeSettings(); requestSelectTab(.inspiration); panelState.collapse(); try await pause()
         try debugCapturePromptPanel(to: output.appendingPathComponent("ui13-input.png"))
-        let data = try JSONSerialization.data(withJSONObject: ["categoryStart": start, "categoryEnd": end, "intermediateCenters": positions], options: .prettyPrinted)
+        let data = try JSONSerialization.data(withJSONObject: ["categoryStart": start, "categoryEnd": end, "promptStart": promptStart, "promptEnd": promptEnd], options: .prettyPrinted)
         try data.write(to: output.appendingPathComponent("ui13-selection-motion.json"))
         return checks
     }
@@ -388,7 +379,9 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
                     let color = bitmap.colorAt(x: bitmap.pixelsWide - 10, y: bitmap.pixelsHigh / 2)!.usingColorSpace(.deviceRGB)!
                     checks.append((label + "_rendered_palette", appearance == .dark ? color.redComponent < 0.18 : color.redComponent > 0.80 && color.redComponent < 0.995))
                     let bottom = BloomLayoutDiagnostics.frames["panelFooterControls"]?.maxY ?? -999
-                    checks.append((label + "_bottom_16", abs(panel.frame.height - bottom - 16) < 0.5))
+                    let compactFooter = [.clipboard, .prompts, .inspirationLibrary].contains(tab)
+                    let bottomInset: CGFloat = compactFooter ? BloomListLayout.verticalInset + 1 : 16
+                    checks.append((label + "_bottom_inset", abs(panel.frame.height - bottom - bottomInset) < 0.5))
                     checks.append((label + "_expansion", panelState.isExpanded == (expanded || tab == .chat || tab == .globalSearch)))
                 }
                 requestSelectTab(.clipboard); try await settle()
@@ -687,6 +680,118 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         requestSelectTab(.inspirationLibrary)
         openInspirationFromLibrary(identifier: id)
     }
+    func debugLibraryMotionProbe(output: URL) async throws {
+        try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+        _ = present()
+        var checks: [(String, Bool)] = []
+        var sequences: [[String: Any]] = []
+        for (appearance, scale): (PanelAppearance, Double) in [(.dark, 0.85), (.dark, 1.0), (.dark, 1.2), (.light, 1.0)] {
+            let screen = NSScreen.main!.frame
+            let size = CGSize(width: 1470 * scale, height: 956 * scale)
+            let metrics = ScreenMetrics(frame: .init(x: screen.midX - size.width / 2, y: screen.maxY - size.height, width: size.width, height: size.height), auxiliaryTopLeftArea: nil, auxiliaryTopRightArea: nil, statusBarThickness: 32)
+            currentMetrics = metrics
+            panelState.update(metrics: metrics)
+            panelState.preferences.appearance = appearance
+            panelState.preferences.reduceMotion = false
+            for tab: PanelTab in [.clipboard, .prompts, .inspirationLibrary] {
+                requestSelectTab(tab); debugSetExpanded(false)
+                try await Task.sleep(nanoseconds: 500_000_000)
+                let prefix = tab == .clipboard ? "clipboard" : tab == .prompts ? "prompt" : "library"
+                for expanding in [true, false] {
+                    let name = "\(appearance.rawValue)-\(Int(scale * 100))-\(prefix)-\(expanding ? "expand" : "collapse")"
+                    var frames: [[String: Any]] = []
+                    var heights: [CGFloat] = []
+                    let start = ProcessInfo.processInfo.systemUptime
+                    debugSetExpanded(expanding)
+                    for index in 0..<16 {
+                        let filename = name + "-\(index).png"
+                        try debugCapturePromptPanel(to: output.appendingPathComponent(filename))
+                        heights.append(panel.frame.height)
+                        frames.append(["file": filename, "time": ProcessInfo.processInfo.systemUptime - start,
+                                       "height": panel.frame.height, "progress": panelState.libraryResize?.progress ?? 1])
+                        try await Task.sleep(nanoseconds: 30_000_000)
+                    }
+                    let monotonic = zip(heights, heights.dropFirst()).allSatisfy { expanding ? $0.1 >= $0.0 - 0.1 : $0.1 <= $0.0 + 0.1 }
+                    checks.append((name, monotonic && panelState.libraryResize == nil && panelState.isExpanded == expanding))
+                    sequences.append(["name": name, "frames": frames])
+                }
+                debugSetExpanded(true); try await Task.sleep(nanoseconds: 90_000_000)
+                debugSetExpanded(false); try await Task.sleep(nanoseconds: 60_000_000)
+                debugSetExpanded(true); try await Task.sleep(nanoseconds: 500_000_000)
+                checks.append(("\(appearance.rawValue)-\(Int(scale * 100))-\(prefix)-interruption", panelState.libraryResize == nil && panelState.isExpanded && abs(panel.frame.height - 700 * scale) < 0.1))
+            }
+        }
+        panelState.preferences.reduceMotion = true
+        debugSetExpanded(false)
+        checks.append(("reduced-motion-immediate", panelState.libraryResize == nil && panel.frame.height == 300))
+        try JSONSerialization.data(withJSONObject: sequences, options: [.prettyPrinted]).write(to: output.appendingPathComponent("motion.json"))
+        for (name, passed) in checks { print("MOTION \(name)=\(passed)") }
+        print("MOTION passed=\(checks.filter(\.1).count)/\(checks.count)"); fflush(stdout)
+        panelState.preferences.reduceMotion = false
+        panelState.preferences.appearance = .dark
+        _ = present(); requestSelectTab(.prompts)
+    }
+
+    /// Captures the real SwiftUI hierarchy at the supported size limits using isolated fixtures.
+    func debugAdaptiveLibraryProbe(output: URL) async throws {
+        try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+        panelState.preferences.reduceMotion = true
+        var report: [[String: Any]] = []
+        for appearance: PanelAppearance in [.dark, .light] {
+            panelState.preferences.appearance = appearance
+            for scale in [0.85, 1.0, 1.2] {
+                for expanded in [false, true] {
+                    for tab: PanelTab in [.clipboard, .prompts, .inspirationLibrary] {
+                        requestSelectTab(tab)
+                        debugSetExpanded(expanded)
+                        clipboardViewModel.filterDate(.all)
+                        if let first = promptModel?.items.first { promptModel?.select(first.id) }
+                        if let first = inspirationLibraryViewModel.items.first { inspirationLibraryViewModel.select(first.id) }
+                        try await Task.sleep(nanoseconds: 250_000_000)
+                        let size = NSSize(width: 640 * scale, height: (expanded ? 700 : 300) * scale)
+                        panel.setFrame(NSRect(origin: .init(x: 400, y: 60), size: size), display: true)
+                        try await Task.sleep(nanoseconds: 250_000_000)
+                        let name = "\(appearance.rawValue)-\(Int(scale * 100))-\(tab.rawValue)-\(expanded ? "expanded" : "compact")"
+                        try debugCapturePromptPanel(to: output.appendingPathComponent(name + ".png"))
+                        let prefix = tab == .clipboard ? "clipboard" : tab == .prompts ? "prompt" : "library"
+                        let frames = BloomLayoutDiagnostics.frames
+                        let viewport = frames[prefix + "Viewport"] ?? .zero
+                        let cards = frames.filter { $0.key.hasPrefix(prefix + "Card.") }.map(\.value)
+                        let visible = cards.filter { viewport.insetBy(dx: -1, dy: -1).contains($0) }
+                        let columnCount = tab == .clipboard ? clipboardViewModel.gridColumnCount : tab == .prompts ? promptModel?.gridColumnCount ?? 0 : 1
+                        var keyboardOK = true
+                        if tab == .clipboard, let first = clipboardViewModel.visibleItems.first {
+                            clipboardViewModel.select(first.id)
+                            debugSendKeyDown(keyCode: UInt16(kVK_DownArrow))
+                            keyboardOK = clipboardViewModel.selectedID == clipboardViewModel.visibleItems[min(columnCount, clipboardViewModel.visibleItems.count - 1)].id
+                        } else if tab == .prompts, let model = promptModel, let first = model.items.first {
+                            model.select(first.id)
+                            debugSendKeyDown(keyCode: UInt16(kVK_DownArrow))
+                            keyboardOK = model.selectedID == model.items[min(columnCount, model.items.count - 1)].id
+                        }
+                        let valid = !visible.isEmpty && keyboardOK && viewport.width > 0 && viewport.maxY <= size.height
+                        report.append(["name": name, "valid": valid, "visibleCards": visible.count, "columns": columnCount,
+                                       "cardHeight": visible.first?.height ?? 0, "viewport": NSStringFromRect(viewport), "keyboard": keyboardOK])
+                        print("ADAPTIVE \(name) visible=\(visible.count) columns=\(columnCount) keyboard=\(keyboardOK) valid=\(valid)")
+                    }
+                }
+            }
+        }
+        try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys]).write(to: output.appendingPathComponent("review.json"))
+        panelState.preferences.appearance = .dark
+        _ = present()
+        requestSelectTab(.prompts)
+        debugSetExpanded(true)
+        try await Task.sleep(nanoseconds: 350_000_000)
+        let expandedHeight = panel.frame.height
+        debugSetExpanded(false)
+        try await Task.sleep(nanoseconds: 350_000_000)
+        let compactHeight = panel.frame.height
+        print("ADAPTIVE native_expansion=\(expandedHeight > compactHeight) expanded=\(expandedHeight) compact=\(compactHeight)")
+        if let first = promptModel?.items.first { promptModel?.select(first.id) }
+        print("ADAPTIVE completed=\(report.count) passed=\(report.filter { $0["valid"] as? Bool == true }.count)"); fflush(stdout)
+    }
+
     func debugSetExpanded(_ expanded: Bool) {
         if expanded { panelState.expand() } else { panelState.collapse() }
     }
@@ -1291,6 +1396,7 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         let metrics = ScreenLocator.metrics(for: screen)
         frameAnimationTimer?.invalidate()
         frameAnimationTimer = nil
+        panelState.libraryResize = nil
         currentMetrics = metrics
         expansionChangesAnimated = false
         panelState.resetForPresentation()
@@ -1541,6 +1647,11 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
             return true
         }
         panel.onMoveClipboardSelection = { [weak self] offset in
+            if self?.panelState.selectedTab == .prompts { self?.promptModel?.moveGridSelection(rows: offset); return }
+            self?.clipboardViewModel.moveGridSelection(rows: offset)
+            self?.clipboardViewModel.requestListFocus()
+        }
+        panel.onMoveClipboardHorizontalSelection = { [weak self] offset in
             if self?.panelState.selectedTab == .prompts { self?.promptModel?.moveSelection(by: offset); return }
             self?.clipboardViewModel.moveSelection(by: offset)
             self?.clipboardViewModel.requestListFocus()
@@ -1897,11 +2008,22 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         frameAnimationTimer = nil
 
         guard animated, panel.isVisible, !panelState.reducesMotion else {
+            panelState.libraryResize = nil
             panel.setFrame(frame, display: true)
             return
         }
 
-        animatePanel(to: frame, duration: 0.36, curve: (0.22, 1, 0.36, 1))
+        let isLibrary = !panelState.isSettingsOpen && !isInspirationDetailVisible &&
+            (panelState.selectedTab == .clipboard || panelState.selectedTab == .inspirationLibrary ||
+             (panelState.selectedTab == .prompts && promptModel?.detailID == nil))
+        if isLibrary {
+            let inset = panelState.notchHeight + 46 // page padding, footer and spacing
+            panelState.libraryResize = LibraryLayoutTransition(
+                fromSize: .init(width: panel.frame.width - 24, height: panel.frame.height - inset),
+                toSize: .init(width: frame.width - 24, height: frame.height - inset),
+                wasExpanded: panelState.isExpanded, expanded: expanded, previous: panelState.libraryResize)
+        } else { panelState.libraryResize = nil }
+        animatePanel(to: frame, duration: isLibrary ? 0.40 : 0.36, curve: isLibrary ? (0.30, 0.05, 0.25, 1) : (0.22, 1, 0.36, 1))
     }
 
     /// Interruptible frame interpolation. NSWindow.animator can finish an obsolete frame
@@ -1920,12 +2042,14 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
                 func mix(_ a: CGFloat, _ b: CGFloat) -> CGFloat { a + (b - a) * eased }
                 self.panel.setFrame(NSRect(x: mix(initial.minX, target.minX), y: mix(initial.minY, target.minY),
                                       width: mix(initial.width, target.width), height: mix(initial.height, target.height)), display: true)
+                if self.panelState.libraryResize != nil { self.panelState.libraryResize?.progress = eased }
                 if fadeIn { self.panel.alphaValue = min(1, mix(initialAlpha, 1)) }
                 if progress >= 1 {
                     timer.invalidate()
                     self.frameAnimationTimer = nil
                     self.panel.setFrame(target, display: true)
                     self.panel.alphaValue = 1
+                    self.panelState.libraryResize = nil
                 }
             }
         }
@@ -2086,6 +2210,7 @@ private final class JotBloomPanel: NSPanel {
     var onSelectInspirationLibrary: (() -> Void)?
     var onSelectGlobalSearch: (() -> Void)?
     var onMoveClipboardSelection: ((Int) -> Void)?
+    var onMoveClipboardHorizontalSelection: ((Int) -> Void)?
     var onActivateClipboardSelection: (() -> Void)?
     var onCopyClipboardSelection: (() -> Void)?
     var onDeleteClipboardSelection: (() -> Void)?
@@ -2155,6 +2280,11 @@ private final class JotBloomPanel: NSPanel {
                 }
                 if isInspirationLibraryListActive?() == true {
                     onMoveInspirationSelection?(1)
+                    return
+                }
+            case kVK_LeftArrow, kVK_RightArrow:
+                if isClipboardActive?() == true {
+                    onMoveClipboardHorizontalSelection?(Int(event.keyCode) == kVK_LeftArrow ? -1 : 1)
                     return
                 }
             case kVK_Return, kVK_ANSI_KeypadEnter:

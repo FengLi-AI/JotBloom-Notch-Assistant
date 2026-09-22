@@ -120,3 +120,79 @@ public enum PanelGeometry {
         )
     }
 }
+
+/// Uses the actual content proposal, not the screen scale, so rows remain complete.
+public struct LibraryLayoutMetrics: Equatable {
+    public enum ContentKind: CaseIterable, Hashable { case clipboard, prompts, inspirations }
+    public let showsSidebar: Bool
+    public let sidebarReveal: CGFloat
+    public let sidebarWidth: CGFloat
+    public let gridWidth: CGFloat
+    public let gridHeight: CGFloat
+    public let columns: Int
+    public let rows: Int
+    public let cardHeight: CGFloat
+    public let gap: CGFloat = 8
+
+    public init(size: CGSize, expanded: Bool, kind: ContentKind) {
+        showsSidebar = expanded && size.height > 340 && size.width >= 460
+        sidebarReveal = showsSidebar ? 1 : 0
+        sidebarWidth = showsSidebar ? min(112, max(96, size.width * 0.18)) : 0
+        gridWidth = max(1, size.width - (showsSidebar ? sidebarWidth + 16 : 0))
+        gridHeight = max(1, size.height - (showsSidebar ? 0 : 30))
+        switch kind {
+        case .clipboard:
+            columns = max(1, min(4, Int((gridWidth + 8) / 164)))
+        case .prompts:
+            columns = gridWidth >= 680 ? 3 : gridWidth >= 360 ? 2 : 1
+        case .inspirations:
+            columns = 1
+        }
+        if showsSidebar {
+            let preferred: CGFloat = kind == .clipboard ? 144 : kind == .prompts ? 124 : 76
+            let nearest = max(1, Int(((gridHeight + 8) / (preferred + 8)).rounded()))
+            let proposedHeight = (gridHeight - CGFloat(nearest - 1) * 8) / CGFloat(nearest)
+            rows = proposedHeight > preferred * 1.08 ? nearest + 1 : nearest
+        } else {
+            rows = kind == .inspirations ? 3 : 2
+        }
+        cardHeight = max(1, floor((gridHeight - CGFloat(rows - 1) * 8) / CGFloat(rows)))
+    }
+    /// Interpolate endpoint sizes rather than reselecting a row count on every animation frame.
+    public init(from: Self, to: Self, progress: CGFloat) {
+        let p = min(1, max(0, progress))
+        func mix(_ a: CGFloat, _ b: CGFloat) -> CGFloat { a + (b - a) * p }
+        sidebarReveal = mix(from.sidebarReveal, to.sidebarReveal)
+        showsSidebar = sidebarReveal >= 0.5
+        sidebarWidth = mix(from.sidebarWidth, to.sidebarWidth)
+        gridWidth = mix(from.gridWidth, to.gridWidth)
+        gridHeight = mix(from.gridHeight, to.gridHeight)
+        cardHeight = mix(from.cardHeight, to.cardHeight)
+        columns = p < 0.5 ? from.columns : to.columns
+        rows = p < 0.5 ? from.rows : to.rows
+    }
+
+}
+
+
+/// An interrupted resize starts at the currently rendered metrics, never at an old endpoint.
+public struct LibraryLayoutTransition: Equatable {
+    private let start: [LibraryLayoutMetrics.ContentKind: LibraryLayoutMetrics]
+    private let end: [LibraryLayoutMetrics.ContentKind: LibraryLayoutMetrics]
+    public var progress: CGFloat = 0
+
+    public init(fromSize: CGSize, toSize: CGSize, wasExpanded: Bool, expanded: Bool, previous: Self? = nil) {
+        start = Dictionary(uniqueKeysWithValues: LibraryLayoutMetrics.ContentKind.allCases.map {
+            ($0, previous?.layout(for: $0) ?? LibraryLayoutMetrics(size: fromSize, expanded: wasExpanded, kind: $0))
+        })
+        end = Dictionary(uniqueKeysWithValues: LibraryLayoutMetrics.ContentKind.allCases.map {
+            ($0, LibraryLayoutMetrics(size: toSize, expanded: expanded, kind: $0))
+        })
+    }
+    public func layout(for kind: LibraryLayoutMetrics.ContentKind) -> LibraryLayoutMetrics {
+        .init(from: start[kind]!, to: end[kind]!, progress: progress)
+    }
+    public func changesColumns(for kind: LibraryLayoutMetrics.ContentKind) -> Bool {
+        start[kind]!.columns != end[kind]!.columns
+    }
+}

@@ -1,4 +1,5 @@
 import SwiftUI
+import JotBloomCore
 
 enum BloomTheme {
     /// Dynamic NSColors resolve with the view's appearance, including native editors.
@@ -13,6 +14,8 @@ enum BloomTheme {
     static let shell = adaptive(dark: (8, 10, 14), light: (237, 239, 242))
     static let surface = adaptive(dark: (20, 23, 29), light: (246, 247, 249))
     static let well = adaptive(dark: (25, 29, 37), light: (250, 251, 252))
+    static let libraryCard = adaptive(dark: (29, 33, 42), light: (255, 255, 255))
+    static let libraryEdge = adaptive(dark: (51, 59, 73), light: (211, 218, 228))
     static let raised = adaptive(dark: (39, 45, 55), light: (252, 253, 254))
     static let selected = adaptive(dark: (20, 47, 86), light: (222, 232, 253))
     static let selectionEnd = adaptive(dark: (21, 68, 173), light: (42, 105, 224))
@@ -34,10 +37,15 @@ enum BloomTheme {
 
 }
 
+private struct BloomLibraryResizeKey: EnvironmentKey { static let defaultValue: LibraryLayoutTransition? = nil }
 private struct BloomVisibleKey: EnvironmentKey { static let defaultValue = false }
 private struct BloomExpandedKey: EnvironmentKey { static let defaultValue = false }
 private struct BloomReduceMotionKey: EnvironmentKey { static let defaultValue = false }
 extension EnvironmentValues {
+    var bloomLibraryResize: LibraryLayoutTransition? {
+        get { self[BloomLibraryResizeKey.self] }
+        set { self[BloomLibraryResizeKey.self] = newValue }
+    }
     var bloomVisible: Bool {
         get { self[BloomVisibleKey.self] }
         set { self[BloomVisibleKey.self] = newValue }

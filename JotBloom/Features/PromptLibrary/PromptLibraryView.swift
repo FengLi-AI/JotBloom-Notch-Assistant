@@ -4,9 +4,11 @@ import SwiftUI
 
 struct PromptLibraryView: View {
     @ObservedObject var model: PromptLibraryViewModel
+    @Environment(\.bloomLibraryResize) private var resize
     @Environment(\.bloomExpanded) private var expanded
     @Environment(\.bloomReduceMotion) private var reduceMotion
     @State private var listFocused = false
+    @State private var hoveredPromptID: Int64?
     @StateObject private var libraryDrag = BloomLibraryDrag()
     @FocusState private var titleFocused: Bool
     @FocusState private var detailFocused: Bool
@@ -57,34 +59,9 @@ struct PromptLibraryView: View {
         model.saveDetail(asNew: asNew)
     }
     private var list: some View {
-        VStack(spacing: 8) {
-            HStack {
-                Text("提示词库").font(BloomTypography.font(17, role: .label))
-                Spacer()
-                Text("已加载 \(model.items.count) 条").font(BloomTypography.font(11)).foregroundStyle(BloomTheme.muted)
-            }.frame(height: 32)
-            HStack(spacing: 4) {
-                ForEach([false, true], id: \.self) { favorites in
-                    Button { model.favoritesOnly = favorites } label: {
-                        BloomActionLabel(title: favorites ? "常用" : "全部", symbol: favorites ? "star" : "layout-grid")
-                            .font(BloomTypography.font(11, role: .label))
-                            .frame(width: 78, height: 30)
-                            .foregroundStyle(model.favoritesOnly == favorites ? Color.white : BloomTheme.muted)
-                            .contentShape(Rectangle())
-                    }.buttonStyle(.plain)
-                        .accessibilityAddTraits(model.favoritesOnly == favorites ? [.isSelected] : [])
-                }
-            }
-            .background(alignment: .leading) {
-                BloomSelectionSurface(radius: 10).frame(width: 78, height: 30)
-                    .offset(x: model.favoritesOnly ? 82 : 0)
-                    .animation(reduceMotion ? nil : BloomTheme.selectionAnimation, value: model.favoritesOnly)
-                    .bloomMeasure("promptSelection")
-            }
-            .padding(4).background(BloomTheme.shell, in: RoundedRectangle(cornerRadius: 14))
-                .frame(maxWidth: .infinity, alignment: .leading).disabled(model.busy)
-            GeometryReader { geometry in
-                Group {
+        VStack(spacing: BloomListLayout.spacing) {
+            BloomAdaptiveLibrary(kind: .prompts, expanded: expanded, sidebar: { promptSidebar }, filters: { promptFilters }) { layout in
+                    Group {
                     if model.items.isEmpty {
                         VStack(spacing: 12) {
                             Text(model.isLoading ? "正在读取…" : model.favoritesOnly ? "还没有常用提示词，点列表星标加入" : "暂无内容")
@@ -95,63 +72,101 @@ struct PromptLibraryView: View {
                     } else {
                         ScrollViewReader { proxy in
                             ScrollView {
-                                LazyVStack(spacing: expanded ? 6 : 4) {
-                                    ForEach(model.items) { prompt in row(prompt).id(prompt.id) }
+                                VStack(spacing: 12) {
+                                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: layout.gap), count: layout.columns), spacing: layout.gap) {
+                                        ForEach(model.items) { prompt in row(prompt, layout: layout).id(prompt.id) }
+                                    }
                                     if model.hasMore { Button("加载更多") { model.loadMore() }.buttonStyle(BloomButtonStyle()).disabled(model.isLoading) }
                                 }
                             }.onAppear { if let id = model.selectedID { proxy.scrollTo(id) } }
                                 .onChange(of: model.selectedID) { id in if let id { proxy.scrollTo(id) } }
+                                .onChange(of: resize == nil) { settled in if settled, let id = model.selectedID { proxy.scrollTo(id) } }
                                 .onChange(of: model.listRevealRequest) { _ in if let id = model.selectedID { proxy.scrollTo(id) } }
                         }
                     }
-                }.frame(width: geometry.size.width, height: geometry.size.height).clipped()
-                    .modifier(BloomListFocusOutline(isFocused: listFocused && model.editingID == nil))
+                    }.frame(maxWidth: .infinity, maxHeight: .infinity).clipped()
+                    .bloomMeasure("promptViewport")
+                    .onAppear { model.gridColumnCount = layout.columns }
+                    .onChange(of: layout.columns) { model.gridColumnCount = $0 }
             }
-            HStack(alignment: .bottom, spacing: 8) {
-                Text(model.feedback ?? "点击整行 / Enter 编辑 · 复制请点行内按钮 · ⌘⌫ 删除").font(BloomTypography.font(10)).foregroundStyle(BloomTheme.muted).lineLimit(2).bloomMeasure("promptFooterText")
+            BloomListFooter(help: "←→↑↓：选择卡片 · 点击 / Enter：编辑\n复制按钮 / ⌘C：复制正文并保留面板\n星标：加入常用 · ⌘Delete：删除\n按住卡片底部拖动柄排序，右键可上移 / 下移") {
+                Text(model.feedback ?? "已加载 \(model.items.count) 条")
+                    .help(model.feedback ?? "当前列表已加载的提示词数量")
+                    .bloomMeasure("promptFooterText")
                 if model.canUndo { Button("撤销") { model.undoDeletion() }.buttonStyle(.plain).foregroundStyle(BloomTheme.blue) }
                 if model.savedCopyID != nil { Button("查看新副本") { model.viewSavedCopy() }.buttonStyle(.plain).foregroundStyle(BloomTheme.blue).disabled(model.busy) }
-                Spacer(minLength: 0)
-            }.frame(height: 34, alignment: .bottom).padding(.trailing, 42)
-        }.padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 16)
+            }
+        }.padding(.horizontal, BloomListLayout.horizontalInset).padding(.vertical, BloomListLayout.verticalInset)
             .background(BloomListFocusTarget(request: model.focusRequest, isFocused: $listFocused))
             .onChange(of: titleFocused) { focused in
                 if !focused, model.editingID != nil, !model.flushEdit() { titleFocused = true }
             }
     }
-    private func row(_ prompt: Prompt) -> some View {
-        HStack(spacing: 8) {
-            BloomDragHandle(id: prompt.id, drag: libraryDrag) { model.move($0, relativeTo: $1, after: $2) }.disabled(model.busy)
+    private var promptSidebar: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("提示词").font(BloomTypography.font(11, role: .label)).foregroundStyle(BloomTheme.muted)
+                .padding(.horizontal, 9).padding(.bottom, 8)
+            BloomLibrarySidebarButton(title: "全部", symbol: "square.grid.2x2", active: !model.favoritesOnly) {
+                libraryDrag.reset(); model.favoritesOnly = false
+            }
+            BloomLibrarySidebarButton(title: "常用", symbol: "star", active: model.favoritesOnly) {
+                libraryDrag.reset(); model.favoritesOnly = true
+            }
+            Spacer(minLength: 0)
+        }.padding(.top, 4).disabled(model.busy)
+    }
+
+    private var promptFilters: some View {
+        HStack(spacing: 4) {
+            BloomLibraryFilter(title: "全部提示词", active: !model.favoritesOnly) { libraryDrag.reset(); model.favoritesOnly = false }
+            BloomLibraryFilter(title: "常用", active: model.favoritesOnly) { libraryDrag.reset(); model.favoritesOnly = true }
+            Spacer(minLength: 0)
+        }.disabled(model.busy)
+    }
+
+    private func row(_ prompt: Prompt, layout: LibraryLayoutMetrics) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
             if model.editingID == prompt.id {
                 TextField("提示词标题", text: $model.editedTitle)
                     .textFieldStyle(.plain).focused($titleFocused)
                     .onSubmit { if model.flushEdit() { titleFocused = false; model.requestFocus() } }
                     .onAppear { titleFocused = true }
                     .accessibilityLabel("提示词标题")
+                    .padding(12).frame(maxHeight: .infinity)
             } else {
                 Button { model.openEditor(prompt.id) } label: {
-                    HStack(spacing: 10) {
-                        BloomSymbol("text.badge.star", size: 16).foregroundStyle(BloomTheme.blue)
-                            .frame(width: 32, height: 32).background(BloomTheme.raised, in: RoundedRectangle(cornerRadius: 11))
-                            .accessibilityHidden(true)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(prompt.title).modifier(BloomType(size: expanded ? 14 : 12)).foregroundStyle(BloomTheme.text).lineLimit(1)
-                            Text(String(prompt.content.prefix(160))).font(BloomTypography.font(10)).foregroundStyle(BloomTheme.muted).lineLimit(1)
-                        }.frame(maxWidth: .infinity, alignment: .leading)
-                        Text(SavedTime.text(prompt.createdAtUTCms))
-                            .font(BloomTypography.font(10)).foregroundStyle(BloomTheme.muted).lineLimit(1)
-                    }.frame(maxWidth: .infinity, maxHeight: .infinity).contentShape(Rectangle())
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(prompt.title).font(BloomTypography.font(12, role: .label))
+                            .foregroundStyle(BloomTheme.text).lineLimit(layout.showsSidebar ? 1 : layout.cardHeight >= 100 ? 2 : 1)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text(String(prompt.content.prefix(300))).font(BloomTypography.font(layout.cardHeight >= 84 ? 12 : 11))
+                            .foregroundStyle(BloomTheme.muted).lineSpacing(2).lineLimit(layout.showsSidebar && layout.cardHeight >= 112 ? 3 : layout.cardHeight >= 90 ? 2 : 1)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 0)
+                    }.padding(.horizontal, 10).padding(.top, 8).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        .contentShape(Rectangle())
                 }.buttonStyle(.plain).disabled(model.busy)
             }
-            BloomIconButton(title: "复制提示词正文", symbol: "doc.on.doc", helpText: "复制完整正文，不收起面板") { model.copy(prompt.id, collapse: false) }.disabled(model.busy)
-            BloomIconButton(title: prompt.isFavorite ? "取消常用" : "加入常用", symbol: prompt.isFavorite ? "star.fill" : "star", active: prompt.isFavorite) { model.toggleFavorite(prompt) }
-                .accessibilityValue(prompt.isFavorite ? "已加入常用" : "未加入常用").disabled(model.busy)
-            BloomIconButton(title: "删除提示词", symbol: "trash", destructive: true, helpText: "删除提示词，3 秒内可撤销") { model.delete(prompt.id) }
-                .padding(.leading, 8).disabled(model.busy)
-        }.buttonStyle(.plain).foregroundStyle(BloomTheme.muted)
-            .padding(.horizontal, 12).frame(height: expanded ? 58 : 48)
-            .modifier(BloomSurface(color: model.selectedID == prompt.id ? BloomTheme.selected : BloomTheme.well, radius: expanded ? 20 : 14))
-            .animation(reduceMotion ? nil : BloomTheme.layoutAnimation, value: expanded)
+            HStack(spacing: 2) {
+                BloomDragHandle(id: prompt.id, drag: libraryDrag) { model.move($0, relativeTo: $1, after: $2) }.disabled(model.busy)
+                Text(BloomListLayout.time(prompt.createdAtUTCms))
+                    .font(BloomTypography.font(10)).lineLimit(1).help(SavedTime.text(prompt.createdAtUTCms))
+                Spacer(minLength: 0)
+                BloomIconButton(title: "复制提示词正文", symbol: "doc.on.doc", helpText: "复制完整正文，不收起面板", size: BloomListLayout.controlSize) { model.copy(prompt.id, collapse: false) }.disabled(model.busy)
+                BloomIconButton(title: prompt.isFavorite ? "取消常用" : "加入常用", symbol: prompt.isFavorite ? "star.fill" : "star", active: prompt.isFavorite, size: BloomListLayout.controlSize) { model.toggleFavorite(prompt) }
+                    .accessibilityValue(prompt.isFavorite ? "已加入常用" : "未加入常用").disabled(model.busy)
+                BloomRowMenu(title: "提示词的更多操作") {
+                    Button("编辑提示词") { model.openEditor(prompt.id) }
+                    Divider()
+                    Button("删除提示词", role: .destructive) { model.delete(prompt.id) }
+                }.disabled(model.busy)
+            }.frame(height: 24).padding(.horizontal, 8).padding(.bottom, 5)
+        }.foregroundStyle(BloomTheme.muted).frame(height: layout.cardHeight)
+            .modifier(BloomLibraryCard(selected: model.selectedID == prompt.id, hovered: hoveredPromptID == prompt.id))
+            .onHover { hoveredPromptID = $0 ? prompt.id : nil }
+            .accessibilityElement(children: .contain)
+            .accessibilityAddTraits(model.selectedID == prompt.id ? [.isSelected] : [])
+            .bloomMeasure("promptCard.\(prompt.id)")
             .modifier(BloomReorder(id: prompt.id, drag: libraryDrag))
             .contextMenu {
                 if let index = model.items.firstIndex(where: { $0.id == prompt.id }) {
@@ -159,6 +174,5 @@ struct PromptLibraryView: View {
                     Button("下移") { if index + 1 < model.items.count { model.move(prompt.id, relativeTo: model.items[index + 1].id, after: true) } }.disabled(index + 1 == model.items.count || model.busy)
                 }
             }
-            .accessibilityElement(children: .contain)
     }
 }

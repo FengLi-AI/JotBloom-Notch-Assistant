@@ -58,6 +58,10 @@ public final class PromptLibraryViewModel: ObservableObject {
     public func activate() { refresh(); if detailID == nil { requestFocus() } }
     public func requestFocus() { focusRequest += 1 }
     public func select(_ id: Int64) { selectedID = id }
+    /// Updated by the rendered grid whenever its available width changes.
+    public var gridColumnCount = 1
+    public func moveGridSelection(rows: Int) { moveSelection(by: rows * max(1, gridColumnCount)) }
+
     public func moveSelection(by offset: Int) {
         guard !items.isEmpty else { return }
         let current = items.firstIndex { $0.id == selectedID } ?? 0

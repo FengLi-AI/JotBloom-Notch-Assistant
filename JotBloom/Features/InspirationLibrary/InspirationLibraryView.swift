@@ -7,6 +7,7 @@ struct InspirationLibraryView: View {
     let onOpen: (Int64) -> Void
 
     @Environment(\.bloomReduceMotion) private var reduceMotion
+    @Environment(\.bloomLibraryResize) private var resize
     @Environment(\.bloomExpanded) private var expanded
     @State private var listFocused = false
     @StateObject private var libraryDrag = BloomLibraryDrag()
@@ -19,15 +20,8 @@ struct InspirationLibraryView: View {
     }
 
     private var listScreen: some View {
-        VStack(spacing: 8) {
-            HStack {
-                Text("灵感库").font(BloomTypography.font(17, role: .label))
-                Spacer()
-                Text("已加载 \(viewModel.items.count) 条灵感").font(BloomTypography.font(11)).foregroundStyle(BloomTheme.muted)
-            }.frame(height: 32).bloomMeasure("libraryHeader")
-            GeometryReader { geometry in
-                HStack(alignment: .top, spacing: 14) {
-                    categoryRail
+        VStack(spacing: BloomListLayout.spacing) {
+            BloomAdaptiveLibrary(kind: .inspirations, expanded: expanded, sidebar: { categoryRail }, filters: { categoryFilters }) { layout in
                     Group {
                         if !viewModel.isReady, viewModel.isInitialLoading {
                             ProgressView()
@@ -42,86 +36,71 @@ struct InspirationLibraryView: View {
                                 .foregroundColor(BloomTheme.muted)
                                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                         } else {
-                            inspirationList
+                            inspirationList(layout: layout)
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .clipped()
-                    .modifier(BloomListFocusOutline(isFocused: listFocused))
-                }
-                .frame(width: geometry.size.width, height: geometry.size.height)
-                .clipped()
+                    .bloomMeasure("libraryViewport")
             }
 
-            Group {
+            BloomListFooter(help: "↑↓：选择 · Enter：打开详情\n⌘Delete：删除，可撤销\n按住行左侧拖动柄排序，右键可上移 / 下移") {
                 if let feedback = viewModel.feedback {
                     listFeedback(feedback)
                 } else {
-                    Text("↑↓ 选择 · Enter 打开 · ⌘Delete 删除")
-                        .font(BloomTypography.font(10)).foregroundStyle(BloomTheme.muted)
+                    Text("已加载 \(viewModel.items.count) 条灵感")
                         .bloomMeasure("libraryFooterText")
-                        .frame(maxWidth: .infinity, minHeight: 34, alignment: .bottomLeading)
                 }
-            }.frame(height: 34, alignment: .bottom).padding(.trailing, 42)
+            }
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 12).padding(.bottom, 16)
+        .padding(.horizontal, BloomListLayout.horizontalInset)
+        .padding(.vertical, BloomListLayout.verticalInset)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(BloomListFocusTarget(request: viewModel.listFocusRequest, isFocused: $listFocused))
     }
 
     private var categoryRail: some View {
         ScrollView {
-            VStack(spacing: expanded ? 6 : 2) {
+            VStack(spacing: 4) {
                 category("全部", symbol: "square.grid.2x2", value: nil)
                 category("文章", symbol: "doc.text", value: .article)
                 category("作品", symbol: "paintbrush.pointed", value: .work)
                 category("产品", symbol: "cube", value: .product)
                 category("idea", symbol: "lightbulb", value: .idea)
-                Spacer(minLength: 0)
-            }
-            .background(alignment: .top) {
-                BloomSelectionSurface(radius: 14)
-                    .frame(height: expanded ? 64 : 36)
-                    .offset(y: CGFloat(categoryIndex) * (expanded ? 70 : 38))
-                    .animation(reduceMotion ? nil : BloomTheme.selectionAnimation, value: categoryIndex)
-                    .bloomMeasure("categorySelection")
-            }
-            .animation(reduceMotion ? nil : BloomTheme.layoutAnimation, value: expanded)
-        }.padding(4).frame(width: 84)
-            .bloomMeasure("categoryRail")
-            .background(BloomTheme.shell, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            }.padding(4)
+        }.bloomMeasure("categoryRail")
             .scrollIndicators(.hidden)
     }
 
-    private var categoryIndex: Int {
-        switch viewModel.filterCategory { case nil: return 0; case .article: return 1; case .work: return 2; case .product: return 3; case .idea: return 4 }
+    private var categoryFilters: some View {
+        HStack(spacing: 4) {
+            categoryFilter("全部", value: nil)
+            categoryFilter("文章", value: .article)
+            categoryFilter("作品", value: .work)
+            categoryFilter("产品", value: .product)
+            categoryFilter("idea", value: .idea)
+            Spacer(minLength: 0)
+        }.disabled(viewModel.isReordering)
+    }
+
+    private func categoryFilter(_ title: String, value: InspirationCategory?) -> some View {
+        BloomLibraryFilter(title: title, active: viewModel.filterCategory == value) {
+            libraryDrag.reset(); viewModel.filter(value)
+        }
     }
 
     private func category(_ title: String, symbol: String, value: InspirationCategory?) -> some View {
-        let active = viewModel.filterCategory == value
-        let labelWidth = (title as NSString).size(withAttributes: [.font: BloomTypography.nsFont(11, role: .label)]).width
-        let leading = (76 - 16 - 6 - labelWidth) / 2
-        return Button { libraryDrag.reset(); viewModel.filter(value) } label: { ZStack {
-            BloomSymbol(symbol, size: expanded ? 20 : 16)
-                .position(x: expanded ? 38 : leading + 8, y: expanded ? 21 : 18)
-            Text(title).font(BloomTypography.font(11, role: .label))
-                .position(x: expanded ? 38 : leading + 22 + labelWidth / 2, y: expanded ? 46 : 18)
-        }
-        .frame(width: 76, height: expanded ? 64 : 36)
-        .foregroundStyle(active ? Color.white : BloomTheme.muted)
-        .contentShape(Rectangle()) }
-        .buttonStyle(.plain).disabled(viewModel.isReordering)
-        .help("显示\(title)灵感")
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(title)灵感")
-        .accessibilityAddTraits(active ? [.isSelected] : [])
+        BloomLibrarySidebarButton(title: title, symbol: symbol, active: viewModel.filterCategory == value) {
+            libraryDrag.reset(); viewModel.filter(value)
+        }.disabled(viewModel.isReordering)
+            .help("显示\(title)灵感")
+            .accessibilityLabel("\(title)灵感")
     }
 
-    private var inspirationList: some View {
+    private func inspirationList(layout: LibraryLayoutMetrics) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: expanded ? 6 : 4) {
+                LazyVStack(spacing: BloomListLayout.rowSpacing) {
                     ForEach(viewModel.items) { inspiration in
                         InspirationLibraryRow(
                             inspiration: inspiration,
@@ -133,7 +112,9 @@ struct InspirationLibraryView: View {
                                 viewModel.delete(identifier: inspiration.id)
                             },
                             drag: libraryDrag,
-                            onMove: { viewModel.move($0, relativeTo: $1, after: $2) }
+                            onMove: { viewModel.move($0, relativeTo: $1, after: $2) },
+                            rowHeight: layout.cardHeight,
+                            compact: !layout.showsSidebar
                         )
                         .id(inspiration.id)
                         .modifier(BloomReorder(id: inspiration.id, drag: libraryDrag))
@@ -159,6 +140,7 @@ struct InspirationLibraryView: View {
                 }
             }
             .onAppear { if let id = viewModel.selectedID { proxy.scrollTo(id, anchor: .center) } }
+            .onChange(of: resize == nil) { settled in if settled, let id = viewModel.selectedID { proxy.scrollTo(id) } }
             .onChange(of: viewModel.selectedID) { identifier in
                 guard let identifier else { return }
                 if reduceMotion {
@@ -211,7 +193,7 @@ struct InspirationLibraryView: View {
             }
         }
         .font(BloomTypography.font(11))
-        .frame(height: 34, alignment: .bottom)
+        .help(feedback.message)
         .accessibilityElement(children: .contain)
     }
 }

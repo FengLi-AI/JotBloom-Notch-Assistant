@@ -3,6 +3,54 @@ import XCTest
 @testable import JotBloomCore
 
 final class PanelGeometryTests: XCTestCase {
+    func testAdaptiveLibrariesFitCompleteRowsAtEverySupportedScale() {
+        for scale in [0.85, 1.0, 1.2] {
+            for expanded in [false, true] {
+                for kind: LibraryLayoutMetrics.ContentKind in [.clipboard, .prompts, .inspirations] {
+                    let size = CGSize(width: 640 * scale - 24, height: (expanded ? 700 : 300) * scale - 32 - 16 - 24 - 6)
+                    let layout = LibraryLayoutMetrics(size: size, expanded: expanded, kind: kind)
+                    XCTAssertEqual(layout.showsSidebar, expanded)
+                    XCTAssertGreaterThanOrEqual(layout.cardHeight, kind == .inspirations ? 40 : 65)
+                    XCTAssertLessThanOrEqual(CGFloat(layout.rows) * layout.cardHeight + CGFloat(layout.rows - 1) * layout.gap, layout.gridHeight)
+                    XCTAssertLessThanOrEqual(layout.gridWidth + (layout.showsSidebar ? layout.sidebarWidth + 16 : 0), size.width)
+                    if !expanded { XCTAssertEqual(layout.rows, kind == .inspirations ? 3 : 2) }
+                }
+            }
+        }
+        let base = LibraryLayoutMetrics(size: .init(width: 616, height: 222), expanded: false, kind: .prompts)
+        XCTAssertEqual(base.columns * base.rows, 4)
+        XCTAssertLessThan(base.cardHeight, 100)
+        let wide = LibraryLayoutMetrics(size: .init(width: 744, height: 282), expanded: false, kind: .clipboard)
+        XCTAssertEqual(wide.columns, 4)
+        let narrow = LibraryLayoutMetrics(size: .init(width: 520, height: 517), expanded: true, kind: .clipboard)
+        XCTAssertEqual(narrow.columns, 2)
+    }
+
+    func testLibraryResizeInterpolatesContinuouslyAndCanReverseMidFlight() {
+        for scale in [0.85, 1.0, 1.2] {
+            let small = CGSize(width: 640 * scale - 24, height: 300 * scale - 78)
+            let large = CGSize(width: small.width, height: 700 * scale - 78)
+            var transition = LibraryLayoutTransition(fromSize: small, toSize: large, wasExpanded: false, expanded: true)
+            for kind in LibraryLayoutMetrics.ContentKind.allCases {
+                let start = LibraryLayoutMetrics(size: small, expanded: false, kind: kind)
+                let end = LibraryLayoutMetrics(size: large, expanded: true, kind: kind)
+                for step in 0...60 {
+                    transition.progress = CGFloat(step) / 60
+                    let frame = transition.layout(for: kind)
+                    XCTAssertEqual(frame.cardHeight, start.cardHeight + (end.cardHeight - start.cardHeight) * transition.progress, accuracy: 0.001)
+                    XCTAssertEqual(frame.gridWidth + frame.sidebarWidth + 16 * frame.sidebarReveal, small.width, accuracy: 0.001)
+                    XCTAssertEqual(frame.gridHeight + 30 * (1 - frame.sidebarReveal), small.height + (large.height - small.height) * transition.progress, accuracy: 0.001)
+                }
+                transition.progress = 0.37
+                let current = transition.layout(for: kind)
+                var reverse = LibraryLayoutTransition(fromSize: large, toSize: small, wasExpanded: true, expanded: false, previous: transition)
+                XCTAssertEqual(reverse.layout(for: kind), current)
+                reverse.progress = 1
+                XCTAssertEqual(reverse.layout(for: kind), start)
+            }
+        }
+    }
+
     func testReferenceScreenProducesReferencePanelSizeAtTopCenter() {
         let metrics = makeMetrics(frame: CGRect(x: 0, y: 0, width: 1_470, height: 956))
 
