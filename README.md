@@ -48,7 +48,7 @@ Mac 1.0.5 新增垂垂、云团、嘟角、墨墨、栗栗、暮暮六个小伙�
 
 这些功能无需登录、购买或激活，全部源码与原创角色按 MIT 开源，可仅克隆本仓库独立构建。桌宠、刘海交互和纸条提醒需要带内置刘海屏的 Mac。
 
-![Mac 1.0.5 六位小伙伴设置](site/assets/1.0.5/companions-settings.png)
+![Mac 1.0.7 六位小伙伴设置](site/assets/1.0.7/companions-settings.png)
 
 开发与构建边界见 [仓库边界与协作](docs/REPOSITORY_BOUNDARIES.md)。
 
