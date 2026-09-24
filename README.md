@@ -6,11 +6,11 @@
 
 [访问官网](https://fengli-ai.github.io/JotBloom-Notch-Assistant/) · [版本说明](https://github.com/FengLi-AI/JotBloom-Notch-Assistant/releases)
 
-![萌生深色灵感记录界面](site/assets/1.0.4/dark-inspiration.png)
+![萌生深色灵感记录界面](site/assets/1.0.7/dark-inspiration.png)
 
 <details><summary>查看浅色界面</summary>
 
-![萌生浅色灵感记录界面](site/assets/1.0.4/light-inspiration.png)
+![萌生浅色灵感记录界面](site/assets/1.0.7/light-inspiration.png)
 
 </details>
 
@@ -23,20 +23,6 @@
 - **和 AI 讨论**：使用自己的模型接口，保存对话历史，将讨论整理为灵感；可调整系统提示词。
 - **一起搜索**：搜索灵感、剪贴板和提示词，再按结果分类查找。
 - **按习惯设置**：切换深色／浅色，调整快捷键、顶部标签、默认入口和数据保存位置。
-
-## 六位小伙伴，全部免费开源
-
-Mac 1.0.5 新增垂垂、云团、嘟角、墨墨、栗栗、暮暮六个小伙伴，带有呼吸、好奇、打盹、精神好、累趴、接灵感、满足和递纸条等动作。可选择常驻或偶尔出现，打开萌生面板时会让出位置。
-
-- **拖入刘海收录灵感**：选中文字，拖到刘海本体松手，原文保存到现有灵感库。
-- **Codex 后台完成提醒**：本机 Codex 完成任务后递来纸条；来源应用在前台时不提醒。仅识别新增的结构化完成事件，不上传或保存对话内容。
-- **网页体验**：[选角色、看动作、演示拖入和完成提醒](https://fengli-ai.github.io/JotBloom-Notch-Assistant/companions/)。网页暂存仅限当前页面，刷新后清空，不连接本机 Codex。
-
-这些功能无需登录、购买或激活，全部源码与原创角色按 MIT 开源，可仅克隆本仓库独立构建。桌宠、刘海交互和纸条提醒需要带内置刘海屏的 Mac。
-
-![Mac 1.0.5 六位小伙伴设置](site/assets/1.0.5/companions-settings.png)
-
-开发与构建边界见 [仓库边界与协作](docs/REPOSITORY_BOUNDARIES.md)。
 
 ## 更新记录
 
@@ -52,6 +38,20 @@ Mac 1.0.5 新增垂垂、云团、嘟角、墨墨、栗栗、暮暮六个小伙�
 | 2026-09-10 | Mac 1.0.0-preview.2 | 补齐应用图标，统一应用名称为“萌生｜JotBloom”。 |
 | 2026-09-10 | Mac 1.0.0-preview.1 | 首次公开发布 Mac 客户端，提供灵感记录、剪贴板、提示词与 AI 对话。 |
 
+## 六位小伙伴，全部免费开源
+
+Mac 1.0.5 新增垂垂、云团、嘟角、墨墨、栗栗、暮暮六个小伙伴，带有呼吸、好奇、打盹、精神好、累趴、接灵感、满足和递纸条等动作。可选择常驻或偶尔出现，打开萌生面板时会让出位置。
+
+- **拖入刘海收录灵感**：选中文字，拖到刘海本体松手，原文保存到现有灵感库。
+- **Codex 后台完成提醒**：本机 Codex 完成任务后递来纸条；来源应用在前台时不提醒。仅识别新增的结构化完成事件，不上传或保存对话内容。
+- **网页体验**：[选角色、看动作、演示拖入和完成提醒](https://fengli-ai.github.io/JotBloom-Notch-Assistant/companions/)。网页暂存仅限当前页面，刷新后清空，不连接本机 Codex。
+
+这些功能无需登录、购买或激活，全部源码与原创角色按 MIT 开源，可仅克隆本仓库独立构建。桌宠、刘海交互和纸条提醒需要带内置刘海屏的 Mac。
+
+![Mac 1.0.5 六位小伙伴设置](site/assets/1.0.5/companions-settings.png)
+
+开发与构建边界见 [仓库边界与协作](docs/REPOSITORY_BOUNDARIES.md)。
+
 ## 下载与安装
 
 萌生免费使用，Mac 最新安装包见 [GitHub Releases](https://github.com/FengLi-AI/JotBloom-Notch-Assistant/releases/latest)。
@@ -60,7 +60,9 @@ Mac 1.0.5 新增垂垂、云团、嘟角、墨墨、栗栗、暮暮六个小伙�
 | --- | --- | --- |
 | Mac | 1.0.7 | macOS 13+，Apple Silicon / Intel |
 
-打开 DMG 后，将 **萌生｜JotBloom.app** 拖入“应用程序”。首次启动会请你选择数据保存位置。更新前保存内容并退出旧版，保留重要数据备份。
+打开 DMG 后，将 **萌生｜JotBloom.app** 拖入“应用程序”；更新时先退出旧版，再选择“替换”。请从**访达 → 应用程序**找到萌生并双击打开，安装后不一定会自动出现在程序坞（Dock）。
+
+如果首次打开或更新后被系统拦截：先关闭提醒，再到**系统设置 → 隐私与安全性**，向下滚动，点击萌生对应的**仍要打开**，按提示确认。完成后可回到访达的“应用程序”再次打开萌生。完整步骤见 [安装与更新说明](release/INSTALL.md)，安装包内也附有同样说明。
 
 安装包使用 ad-hoc 签名，尚未经过 Apple 公证，系统可能提示核实来源。请从项目官网或 Releases 下载，按系统指引安装。最低系统及 Intel 设备仍需更多兼容性反馈。
 
