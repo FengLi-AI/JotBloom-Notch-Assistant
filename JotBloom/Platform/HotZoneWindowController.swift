@@ -96,16 +96,16 @@ final class HotZoneWindowController {
         closeWindows()
         windows = NSScreen.screens.compactMap { screen in
             let metrics = ScreenLocator.metrics(for: screen)
-            let hasPhysicalNotch = PanelGeometry.physicalNotchFrame(for: metrics) != nil
+            guard let hotZoneFrame = PanelGeometry.hotZoneFrame(for: metrics) else { return nil }
             guard HotZoneAvailabilityPolicy.isEnabled(
                 panelVisible: panelVisible,
-                hasPhysicalNotch: hasPhysicalNotch,
+                hasPhysicalNotch: true,
                 fullScreenState: fullScreenState
             ) else {
                 return nil
             }
 
-            let window = HotZonePanel(frame: PanelGeometry.hotZoneFrame(for: metrics), fileShelf: fileShelf)
+            let window = HotZonePanel(frame: hotZoneFrame, fileShelf: fileShelf)
             window.onActivate = onActivate
             window.orderFrontRegardless()
             return window

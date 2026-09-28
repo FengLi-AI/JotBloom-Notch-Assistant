@@ -70,7 +70,7 @@ final class PanelGeometryTests: XCTestCase {
         XCTAssertEqual(PanelGeometry.scale(for: large), 1.2, accuracy: 0.001)
     }
 
-    func testNotchMetricsDriveHotZoneFrame() {
+    func testNotchMetricsDriveHotZoneFrame() throws {
         let screen = CGRect(x: 100, y: 50, width: 1_470, height: 956)
         let metrics = ScreenMetrics(
             frame: screen,
@@ -79,7 +79,7 @@ final class PanelGeometryTests: XCTestCase {
             statusBarThickness: 24
         )
 
-        let frame = PanelGeometry.hotZoneFrame(for: metrics)
+        let frame = try XCTUnwrap(PanelGeometry.hotZoneFrame(for: metrics))
 
         XCTAssertEqual(PanelGeometry.notchWidth(for: metrics), 175, accuracy: 0.001)
         XCTAssertEqual(frame.minX, 747.5, accuracy: 0.001)
@@ -144,7 +144,7 @@ final class PanelGeometryTests: XCTestCase {
         XCTAssertLessThan(expected, PanelGeometry.referenceInspirationInputHeight)
     }
 
-    func testNonNotchScreenUsesStatusBarAndFallbackWidth() {
+    func testNonNotchScreenHasNoHotZoneButRetainsPanelLayoutDimensions() {
         let metrics = makeMetrics(
             frame: CGRect(x: -1_920, y: 0, width: 1_920, height: 1_080),
             statusBarThickness: 24
@@ -154,12 +154,10 @@ final class PanelGeometryTests: XCTestCase {
 
         XCTAssertEqual(PanelGeometry.notchWidth(for: metrics), 175, accuracy: 0.001)
         XCTAssertEqual(PanelGeometry.notchHeight(for: metrics), 24, accuracy: 0.001)
-        XCTAssertEqual(frame.width, 159, accuracy: 0.001)
-        XCTAssertEqual(frame.height, 28, accuracy: 0.001)
-        XCTAssertEqual(frame.maxY, metrics.frame.maxY - 24, accuracy: 0.001)
+        XCTAssertNil(frame)
     }
 
-    func testInvalidAuxiliaryAreasUseNonNotchFallback() {
+    func testInvalidAuxiliaryAreasDoNotCreateHotZone() {
         let screen = CGRect(x: 100, y: 50, width: 1_470, height: 956)
         let metrics = ScreenMetrics(
             frame: screen,
@@ -173,10 +171,25 @@ final class PanelGeometryTests: XCTestCase {
         XCTAssertNil(PanelGeometry.physicalNotchFrame(for: metrics))
         XCTAssertEqual(PanelGeometry.notchWidth(for: metrics), 175, accuracy: 0.001)
         XCTAssertEqual(PanelGeometry.notchHeight(for: metrics), 24, accuracy: 0.001)
-        XCTAssertEqual(frame.width, 159, accuracy: 0.001)
-        XCTAssertEqual(frame.height, 28, accuracy: 0.001)
-        XCTAssertEqual(frame.midX, screen.midX, accuracy: 0.001)
-        XCTAssertEqual(frame.maxY, screen.maxY - 24, accuracy: 0.001)
+        XCTAssertNil(frame)
+    }
+
+    func testExternalPrimaryScreenDoesNotStealOrDuplicateNotchHotZone() {
+        let external = makeMetrics(frame: CGRect(x: 0, y: 0, width: 2_560, height: 1_440))
+        // The MacBook is offset when the external display owns the menu bar.
+        let builtIn = ScreenMetrics(
+            frame: CGRect(x: -1_470, y: -300, width: 1_470, height: 956),
+            auxiliaryTopLeftArea: CGRect(x: -1_470, y: 624, width: 646, height: 32),
+            auxiliaryTopRightArea: CGRect(x: -645, y: 624, width: 645, height: 32),
+            statusBarThickness: 24
+        )
+        let expected = CGRect(x: -824, y: 624, width: 179, height: 32)
+
+        for screens in [[external, builtIn], [builtIn, external], [builtIn]] {
+            XCTAssertEqual(screens.compactMap { PanelGeometry.hotZoneFrame(for: $0) }, [expected])
+        }
+        // Clamshell mode or a desktop Mac has no physical notch target.
+        XCTAssertTrue([external].compactMap { PanelGeometry.hotZoneFrame(for: $0) }.isEmpty)
     }
 
     private func makeMetrics(

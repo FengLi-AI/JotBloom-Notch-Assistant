@@ -31,7 +31,8 @@ public enum HotZoneAvailabilityPolicy {
         hasPhysicalNotch: Bool,
         fullScreenState: FrontmostFullScreenState
     ) -> Bool {
-        guard fullScreenState == .windowed else { return false }
-        return !panelVisible || hasPhysicalNotch
+        // A hidden panel must not create an invisible entry point on a non-notch display.
+        // The physical notch remains clickable both before and after opening the panel.
+        return hasPhysicalNotch && fullScreenState == .windowed
     }
 }

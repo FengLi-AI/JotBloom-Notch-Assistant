@@ -24,8 +24,6 @@ public enum PanelGeometry {
     public static let referencePanelSize = CGSize(width: 640, height: 300)
     public static let referenceExpandedHeight: CGFloat = 700
     public static let fallbackNotchWidth: CGFloat = 175
-    public static let fallbackHotZoneHorizontalInset: CGFloat = 8
-    public static let fallbackHotZoneHeight: CGFloat = 28
     public static let referenceInspirationInputHeight: CGFloat = 183
     public static let inspirationContentVerticalPadding: CGFloat = 32
     public static let inspirationInputButtonSpacing: CGFloat = 12
@@ -101,23 +99,10 @@ public enum PanelGeometry {
         return max(44, min(referenceInspirationInputHeight, availableHeight))
     }
 
-    public static func hotZoneFrame(for metrics: ScreenMetrics) -> CGRect {
-        if let physicalNotchFrame = physicalNotchFrame(for: metrics) {
-            return physicalNotchFrame
-        }
-
-        let width = max(
-            1,
-            fallbackNotchWidth - fallbackHotZoneHorizontalInset * 2
-        )
-        let height = fallbackHotZoneHeight
-
-        return CGRect(
-            x: metrics.frame.midX - width / 2,
-            y: metrics.frame.maxY - metrics.statusBarThickness - height,
-            width: width,
-            height: height
-        )
+    /// Non-notch displays have no click or drop target. Panel layout may still use
+    /// fallback dimensions when opened through the menu bar or keyboard shortcut.
+    public static func hotZoneFrame(for metrics: ScreenMetrics) -> CGRect? {
+        physicalNotchFrame(for: metrics)
     }
 }
 

@@ -56,28 +56,26 @@ final class FullScreenStateTests: XCTestCase {
         )
     }
 
-    func testVisiblePanelDisablesFallbackHotZone() {
-        XCTAssertFalse(
-            HotZoneAvailabilityPolicy.isEnabled(
-                panelVisible: true,
-                hasPhysicalNotch: false,
-                fullScreenState: .windowed
-            )
-        )
+    func testNonNotchDisplayNeverEnablesHotZone() {
+        for panelVisible in [false, true] {
+            for state in [FrontmostFullScreenState.windowed, .fullScreen, .unknown] {
+                XCTAssertFalse(
+                    HotZoneAvailabilityPolicy.isEnabled(
+                        panelVisible: panelVisible,
+                        hasPhysicalNotch: false,
+                        fullScreenState: state
+                    ),
+                    "Non-notch display must stay inactive: panelVisible=\(panelVisible), state=\(state)"
+                )
+            }
+        }
     }
 
-    func testHiddenPanelEnablesPhysicalAndFallbackHotZones() {
+    func testHiddenPanelEnablesPhysicalNotchHotZone() {
         XCTAssertTrue(
             HotZoneAvailabilityPolicy.isEnabled(
                 panelVisible: false,
                 hasPhysicalNotch: true,
-                fullScreenState: .windowed
-            )
-        )
-        XCTAssertTrue(
-            HotZoneAvailabilityPolicy.isEnabled(
-                panelVisible: false,
-                hasPhysicalNotch: false,
                 fullScreenState: .windowed
             )
         )
