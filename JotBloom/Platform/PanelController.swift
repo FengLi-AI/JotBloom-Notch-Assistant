@@ -33,6 +33,8 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
     private var restoreAfterDirectorySelection = false
     private var appearanceReveal: BloomThemeRevealView?
     private var closingVisual: NSWindow?
+    private var closingMotion: PanelSurfaceMotion?
+    private var surfaceMotion: PanelSurfaceMotion { (panel.contentView as! PanelMaterialView).motion }
     private var frameAnimationTimer: Timer?
     private var currentMetrics: ScreenMetrics?
     private var expansionChangesAnimated = true
@@ -44,6 +46,8 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
     private lazy var panel: JotBloomPanel = makePanel()
 #if DEBUG
     private var automaticDismissalEnabled = true
+    private var debugCloseSurface: CGSize?
+    private var debugReopenSurface: CGSize?
 #endif
 
     init(
@@ -157,6 +161,8 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
             guard preferences.reduceMotion else { return }
             resizePanel(expanded: panelState.isExpanded, animated: false)
             panel.alphaValue = 1
+            surfaceMotion.finish()
+            closingMotion?.finish(); closingMotion = nil
             closingVisual?.close()
             closingVisual = nil
         }.store(in: &cancellables)
@@ -169,6 +175,8 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
                 if panelState.reducesMotion {
                     resizePanel(expanded: panelState.isExpanded, animated: false)
                     panel.alphaValue = 1
+                    surfaceMotion.finish()
+                    closingMotion?.finish(); closingMotion = nil
                     closingVisual?.close()
                     closingVisual = nil
                 }
@@ -194,7 +202,7 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
                 panel.contentView?.layoutSubtreeIfNeeded()
                 let height = panel.frame.height
                 if index == 0 { print("EDGE_SHADOW_FRAME", name, panel.frame, panel.childWindows?.first?.frame as Any) }
-                shadowFollows = shadowFollows && panel.childWindows?.first?.frame == panel.frame.insetBy(dx: -18, dy: -18)
+                shadowFollows = shadowFollows && panel.childWindows?.first?.frame == panel.frame.insetBy(dx: -PanelOutline.canvasPadding, dy: -PanelOutline.canvasPadding)
                 monotonic = monotonic && (expanding ? height >= previous - 0.5 : height <= previous + 0.5)
                 topFixed = topFixed && abs(panel.frame.maxY - top) < 0.5
                 let chromeY = BloomLayoutDiagnostics.frames["chrome"]?.minY ?? -999
@@ -527,6 +535,184 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
 
     /// Check opacity as well as window ordering: an ordered, fully transparent panel
     /// used to pass lifecycle checks while the companion correctly stayed hidden.
+    /// Exercise the real presentation layer, not just final geometry or screenshots.
+    /// Called only by the isolated debug harness after desktop coordination.
+    func debugSurfaceMotionProbe(toggle: () -> Void) async throws -> [(String, Bool)] {
+        let preferences = panelState.preferences
+        let dismissal = automaticDismissalEnabled
+        automaticDismissalEnabled = false
+        defer { panelState.preferences = preferences; automaticDismissalEnabled = dismissal }
+        var checks: [(String, Bool)] = []
+        func pause(_ ms: UInt64) async throws { try await Task.sleep(nanoseconds: ms * 1_000_000) }
+        func near(_ a: CGSize, _ b: CGSize, tolerance: CGFloat = 5) -> Bool {
+            abs(a.width - b.width) < tolerance && abs(a.height - b.height) < tolerance
+        }
+        func settled() -> Bool {
+            panel.isVisible && panel.alphaValue == 1 && !surfaceMotion.isAnimating &&
+            closingVisual == nil && closingMotion == nil && frameAnimationTimer == nil &&
+            currentMetrics.map { panel.frame == PanelGeometry.panelFrame(for: $0, expanded: panelState.isExpanded) } == true
+        }
+        func phase(_ name: String) {
+            print("SURFACE_PHASE \(name) uptime=\(ProcessInfo.processInfo.systemUptime)"); fflush(stdout)
+        }
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            print("SURFACE system_reduce_motion=true; normal-motion path requires a system without that preference")
+            return [("system_reduce_motion_respected", !surfaceMotion.isAnimating)]
+        }
+        panelState.preferences.reduceMotion = false
+        panelState.preferences.defaultSlot = .clipboard
+        try await pause(1000); toggle(); try await pause(1000)
+        phase("open"); toggle()
+        let initial = surfaceMotion.snapshot().size
+        let frame = panel.frame
+        let began = CACurrentMediaTime()
+        var samples: [(time: Double, size: CGSize, lift: CGFloat)] = []
+        var originalTextScale = true
+        for _ in 0..<40 {
+            try await pause(16)
+            let size = surfaceMotion.debugRenderedSize ?? surfaceMotion.snapshot().size
+            let lift = surfaceMotion.debugRenderedLift
+            let elapsed = CACurrentMediaTime() - began
+            samples.append((elapsed, size, lift))
+            originalTextScale = originalTextScale && surfaceMotion.debugTextHasOriginalScale
+            print("SURFACE_SAMPLE open t=\(elapsed) width=\(size.width) height=\(size.height) lift=\(lift)")
+        }
+        let early = samples.min { abs($0.time - 0.133) < abs($1.time - 0.133) }!
+        let frontRatio = (early.size.height - early.lift) / frame.height
+        let narrowest = samples.min { $0.size.width < $1.size.width }!
+        print("SURFACE_MEASURE front_ratio=\(frontRatio) narrowest_t=\(narrowest.time) lift_max=\(samples.map(\.lift).max() ?? 0)")
+        checks.append(("open_moves_without_prepress_hold", samples[1].size.height > initial.height + 3))
+        checks.append(("front_height_not_rushed", (0.50...0.75).contains(frontRatio)))
+        checks.append(("width_recoil_follows_growth", (0.09...0.20).contains(narrowest.time)))
+        checks.append(("surface_lift_is_subtle", samples.map(\.lift).max().map { (1...12).contains($0) } == true))
+        checks.append(("material_matches_moving_boundary", surfaceMotion.debugSurfaceAndMaskAgree))
+        checks.append(("text_scale_stays_one", originalTextScale))
+        checks.append(("top_center_anchor_and_full_layout", panel.frame == frame && panel.contentView?.bounds.size == frame.size && surfaceMotion.debugAnchorIsTopCenter))
+        try await pause(800)
+        checks.append(("ordinary_open_settles", settled()))
+        phase("close"); toggle(); try await pause(600)
+        checks.append(("close_has_no_lingering_visual", !panel.isVisible && closingVisual == nil && closingMotion == nil))
+        try await pause(400)
+        phase("early_close_and_reverse"); toggle(); try await pause(80)
+        toggle()
+        checks.append(("early_close_transfers_surface", closingMotion?.debugAnimationStartSize.map { near($0, debugCloseSurface ?? .zero) } ?? false))
+        checks.append(("close_releases_interaction", !panel.isVisible && closingVisual?.ignoresMouseEvents == true))
+        try await pause(70)
+        toggle()
+        checks.append(("reopen_transfers_surface", surfaceMotion.debugAnimationStartSize.map { near($0, debugReopenSurface ?? .zero) } ?? false))
+        checks.append(("reopen_single_visual_owner", closingVisual == nil && closingMotion == nil && panel.isVisible))
+        try await pause(1400)
+        checks.append(("interruption_settles", settled()))
+        phase("rapid_toggle_burst")
+        for interval: UInt64 in [16, 32, 60, 100, 40, 90, 20, 140] { toggle(); try await pause(interval) }
+        try await pause(1400)
+        checks.append(("rapid_toggle_burst_settles", settled()))
+        phase("late_dismissal_reverse")
+        toggle(); try await pause(410); toggle(); try await pause(1400)
+        checks.append(("late_close_reopen_nonnegative", settled()))
+        phase("content_size_changes")
+        toggle(); try await pause(1400); toggle(); try await pause(50)
+        panelState.expand(); try await pause(80); panelState.collapse(); try await pause(1400)
+        checks.append(("resize_during_opening_settles", settled() && !panelState.isExpanded))
+        panelState.expand(); try await pause(1400)
+        let expandedFrame = panel.frame
+        toggle(); try await pause(70); toggle()
+        checks.append(("expanded_reopen_keeps_start_frame", panel.frame == expandedFrame))
+        try await pause(1400)
+        checks.append(("expanded_reopen_returns_to_default", settled() && !panelState.isExpanded))
+        phase("reduce_motion")
+        toggle(); try await pause(1400); toggle(); try await pause(60)
+        panelState.preferences.reduceMotion = true
+        try await pause(30)
+        checks.append(("reduce_motion_interrupts_mask", settled()))
+        toggle()
+        checks.append(("reduce_motion_close_immediate", !panel.isVisible && closingVisual == nil))
+        toggle(); try await pause(30)
+        checks.append(("reduce_motion_open_immediate", settled()))
+        return checks
+    }
+
+    /// Isolated native-window checks for the accepted DynamicNotchKit direction.
+    func debugDynamicMotionProbe(toggle: () -> Void) async throws -> [(String, Bool)] {
+        var checks: [(String, Bool)] = []
+        let original = panelState.preferences
+        automaticDismissalEnabled = false
+        defer { panelState.preferences = original; automaticDismissalEnabled = true }
+        let output = URL(fileURLWithPath: ProcessInfo.processInfo.environment["JOTBLOOM_DYNAMIC_EVIDENCE"]!)
+        try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+        func pause(_ milliseconds: UInt64) async throws { try await Task.sleep(nanoseconds: milliseconds * 1_000_000) }
+        func settled() -> Bool {
+            panel.isVisible && !surfaceMotion.isAnimating && closingVisual == nil && frameAnimationTimer == nil &&
+            currentMetrics.map { panel.frame == PanelGeometry.panelFrame(for: $0, expanded: panelState.isExpanded) } == true
+        }
+        func near(_ a: CGSize?, _ b: CGSize?) -> Bool {
+            guard let a, let b else { return false }
+            return abs(a.width - b.width) < 2 && abs(a.height - b.height) < 2
+        }
+        panelState.preferences.reduceMotion = false
+        panelState.preferences.defaultSlot = .clipboard
+        try await pause(1100); toggle(); try await pause(1000)
+        toggle()
+        let frame = panel.frame, began = CACurrentMediaTime()
+        var samples: [[String: Any]] = []
+        var anchorFixed = true, unclipped = true, originalWidth = true, samePath = true
+        for index in 0..<60 {
+            try await pause(16)
+            let s = surfaceMotion.snapshot()
+            anchorFixed = anchorFixed && panel.frame == frame && surfaceMotion.debugAnchorIsTopCenter
+            unclipped = unclipped && surfaceMotion.debugCanvasContainsSurface
+            originalWidth = originalWidth && surfaceMotion.debugTextHasOriginalWidth
+            samePath = samePath && surfaceMotion.debugSurfaceAndMaskAgree
+            samples.append(["t": CACurrentMediaTime() - began, "width": s.size.width, "height": s.size.height,
+                            "shoulder": s.shoulder, "bottomRadius": s.radius, "contentProgress": s.contentOpacity,
+                            "contentScaleY": surfaceMotion.debugContentScaleY, "windowTop": panel.frame.maxY])
+            if [5, 12, 30, 59].contains(index) { try debugCapturePromptPanel(to: output.appendingPathComponent("open-\(index).png")) }
+        }
+        checks += [("top_center_fixed", anchorFixed), ("shoulders_and_overshoot_inside_canvas", unclipped),
+                   ("content_never_stretches_horizontally", originalWidth), ("mask_and_surface_share_path", samePath),
+                   ("open_settles_with_native_text_scale", settled() && surfaceMotion.debugTextHasOriginalScale),
+                   ("outward_shoulders_at_rest", PanelOutline.path(in: CGRect(origin: .zero, size: frame.size)).boundingBoxOfPath.width == frame.width + 30)]
+        toggle(); try await pause(1000)
+        checks.append(("close_removes_ghost", !panel.isVisible && closingVisual == nil && closingMotion == nil))
+        toggle(); try await pause(95); toggle()
+        checks.append(("close_inherits_current_surface", near(closingMotion?.debugAnimationStartSize, debugCloseSurface)))
+        checks.append(("outgoing_surface_releases_input", !panel.isVisible && closingVisual?.ignoresMouseEvents == true))
+        try await pause(65); toggle()
+        checks.append(("reverse_inherits_current_surface", near(surfaceMotion.debugAnimationStartSize, debugReopenSurface)))
+        try await pause(1000)
+        checks.append(("reverse_settles_without_duplicate_window", settled()))
+        for interval: UInt64 in [30, 45, 90, 55, 120, 60, 35, 100] { toggle(); try await pause(interval) }
+        try await pause(1100)
+        checks.append(("rapid_reversal_settles", settled()))
+        panelState.expand(); try await pause(1100)
+        checks.append(("expanded_layout_preserved", settled() && panelState.isExpanded))
+        try debugCapturePromptPanel(to: output.appendingPathComponent("expanded.png"))
+        toggle(); try await pause(90); toggle(); try await pause(1200)
+        checks.append(("expanded_close_reverse_returns_to_default", settled() && !panelState.isExpanded))
+        for tab: PanelTab in [.inspiration, .clipboard, .prompts, .inspirationLibrary, .fileShelf, .chat, .globalSearch] {
+            requestSelectTab(tab); try await pause(120)
+            checks.append(("route_preserved_" + tab.rawValue, panelState.selectedTab == tab && panel.isVisible))
+        }
+        requestSelectTab(.clipboard)
+        panelState.preferences.reduceMotion = true
+        toggle(); checks.append(("reduced_close_is_immediate", !panel.isVisible && closingVisual == nil))
+        toggle(); try await pause(30)
+        checks.append(("reduced_open_is_immediate", settled() && surfaceMotion.debugTextHasOriginalScale))
+        panelState.preferences.reduceMotion = false
+        try JSONSerialization.data(withJSONObject: samples, options: [.prettyPrinted, .sortedKeys]).write(to: output.appendingPathComponent("native-motion-samples.json"))
+        try JSONSerialization.data(withJSONObject: checks.map { ["check": $0.0, "passed": $0.1] }, options: [.prettyPrinted, .sortedKeys]).write(to: output.appendingPathComponent("native-checks.json"))
+        try JSONSerialization.data(withJSONObject: NSScreen.screens.map { screen in
+            ["frame": NSStringFromRect(screen.frame), "safeAreaTop": screen.safeAreaInsets.top,
+             "notch": PanelGeometry.physicalNotchFrame(for: ScreenLocator.metrics(for: screen)).map(NSStringFromRect) ?? "none"] as [String: Any]
+        }, options: [.prettyPrinted]).write(to: output.appendingPathComponent("screens.json"))
+        try debugCapturePromptPanel(to: output.appendingPathComponent("resting-panel.png"))
+        return checks
+    }
+
+    func debugConfigureSurfacePreview() {
+        panelState.preferences.defaultSlot = .clipboard
+    }
+
     func debugPresentationProbe(toggle: () -> Void) async throws -> [(String, Bool)] {
         var checks: [(String, Bool)] = []
         let preferences = panelState.preferences
@@ -626,7 +812,7 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         checks.append(("review_shadow_hides_with_panel", panel.childWindows?.allSatisfy { !$0.isVisible } == true))
         show(); try await settle()
         checks.append(("review_reopens", panel.isVisible))
-        checks.append(("review_shadow_reattaches_on_reopen", panel.childWindows?.first?.isVisible == true && panel.childWindows?.first?.frame == panel.frame.insetBy(dx: -18, dy: -18)))
+        checks.append(("review_shadow_reattaches_on_reopen", panel.childWindows?.first?.isVisible == true && panel.childWindows?.first?.frame == panel.frame.insetBy(dx: -PanelOutline.canvasPadding, dy: -PanelOutline.canvasPadding)))
         toggle(); try await settle()
         checks.append(("review_toggle_hides", !panel.isVisible))
         show(); try await settle()
@@ -1648,25 +1834,50 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         frameAnimationTimer = nil
         panelState.libraryResize = nil
         currentMetrics = metrics
+        surfaceMotion.collapsedSize = CGSize(width: PanelGeometry.notchWidth(for: metrics), height: PanelGeometry.notchHeight(for: metrics))
         expansionChangesAnimated = false
         panelState.fileShelfPreview = false
         panelState.resetForPresentation()
         panelState.update(metrics: metrics)
         expansionChangesAnimated = true
 
+        // Transfer the current presentation before removing the outgoing surface.
+        // Reopening during dismissal never restarts at the collapsed endpoint.
+        let finalFrame = PanelGeometry.panelFrame(for: metrics, expanded: panelState.isExpanded)
+        let returningFrame = closingVisual?.frame
+        let sameAnchor = returningFrame.map {
+            abs($0.midX - finalFrame.midX) < 0.5 && abs($0.maxY - finalFrame.maxY) < 0.5
+        } ?? false
+        let returningSurface = sameAnchor ? closingMotion?.snapshot() : nil
+#if DEBUG
+        debugReopenSurface = returningSurface?.size
+#endif
+        closingMotion?.finish(); closingMotion = nil
         closingVisual?.close()
         closingVisual = nil
-        let finalFrame = PanelGeometry.panelFrame(for: metrics, expanded: panelState.isExpanded)
-        panel.alphaValue = panelState.reducesMotion ? 1 : 0
-        panel.setFrame(panelState.reducesMotion ? finalFrame : finalFrame.offsetBy(dx: 0, dy: 8), display: true)
+        surfaceMotion.finish()
+        panel.alphaValue = 1
+        panel.setFrame(!panelState.reducesMotion && sameAnchor ? returningFrame! : finalFrame, display: true)
         panel.appearance = NSAppearance(named: panelState.preferences.appearance == .dark ? .darkAqua : .aqua)
         panel.contentView?.layoutSubtreeIfNeeded()
         panel.contentView?.displayIfNeeded()
+        if !panelState.reducesMotion {
+            surfaceMotion.prepare(from: returningSurface)
+        }
         panel.orderFrontRegardless()
+        surfaceMotion.attachShadow(panel.surfaceShadowView)
         panelState.setPresented(true)
         if !fileDragActive { panel.makeKey(); completeTabSelection(panelState.selectedTab) }
         if !panelState.reducesMotion {
-            animatePanel(to: finalFrame, duration: 0.46, curve: (0.18, 0.88, 0.24, 1.035), fadeIn: true)
+            // Commit the starting surface after route/focus updates, before its
+            // spring clock starts. Initial drawing must not consume the reveal.
+            panel.contentView?.layoutSubtreeIfNeeded()
+            panel.contentView?.displayIfNeeded()
+            CATransaction.flush()
+            surfaceMotion.animate(opening: true, to: finalFrame.size)
+            if panel.frame != finalFrame {
+                animatePanel(to: finalFrame, duration: 0.36, curve: (0.22, 1, 0.36, 1))
+            }
         }
 
         logger.debug("Panel presented on a \(Int(screen.frame.width), privacy: .public) by \(Int(screen.frame.height), privacy: .public) point screen")
@@ -1700,6 +1911,7 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         frameAnimationTimer = nil
         appearanceReveal?.removeFromSuperview(); appearanceReveal = nil
         animateDismissalVisual()
+        surfaceMotion.finish()
         detailTransitionInProgress = false
         if !preservingEditor {
             inspirationLibraryViewModel.resetForPanelDismissal()
@@ -1722,6 +1934,8 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         restoringSystemFocus = false
         frameAnimationTimer?.invalidate()
         frameAnimationTimer = nil
+        surfaceMotion.finish()
+        closingMotion?.finish(); closingMotion = nil
         closingVisual?.close()
         panel.delegate = nil
         panel.close()
@@ -1789,6 +2003,8 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
             restoreAfterDirectorySelection = panel.isVisible
             frameAnimationTimer?.invalidate()
             frameAnimationTimer = nil
+            surfaceMotion.finish()
+            closingMotion?.finish(); closingMotion = nil
             closingVisual?.close()
             closingVisual = nil
             panel.orderOut(nil)
@@ -2305,11 +2521,13 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
 
         guard animated, panel.isVisible, !panelState.reducesMotion else {
             panelState.libraryResize = nil
+            surfaceMotion.finish()
             panel.setFrame(frame, display: true)
             panel.alphaValue = 1
             return
         }
 
+        if surfaceMotion.isAnimating { surfaceMotion.animate(opening: true, to: frame.size) }
         let isLibrary = usesLibraryResize
         if isLibrary {
             if !transitionPrepared { prepareLibraryResize(expanded: expanded, wasExpanded: wasExpanded ?? panelState.isExpanded) }
@@ -2407,61 +2625,311 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
     }
 
     private func makeDismissalVisual() {
-        closingVisual?.close()
-        closingVisual = nil
-        guard panel.isVisible, panel.alphaValue > 0, !panelState.reducesMotion,
+        closingMotion?.finish(); closingMotion = nil
+        closingVisual?.close(); closingVisual = nil
+        guard panel.isVisible, !panelState.reducesMotion,
               let view = panel.contentView,
-              let bitmap = NSBitmapImageRep(
-                bitmapDataPlanes: nil,
-                pixelsWide: Int(ceil(view.bounds.width)), pixelsHigh: Int(ceil(view.bounds.height)),
-                bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
-                colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
-              ) else { return }
-        // The 240ms fading copy needs only 1 pixel per point, not a full Retina cache.
-        // Keep the real interactive window at native resolution.
-        bitmap.size = view.bounds.size
-        view.cacheDisplay(in: view.bounds, to: bitmap)
+              let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
+        // Cache unmasked, full-resolution content; the live mask is transferred separately.
+        // Otherwise interrupting an opening would permanently bake its crop into the copy.
+        surfaceMotion.withoutMask { view.cacheDisplay(in: view.bounds, to: bitmap) }
+        // Snapshot after the cache work: the compositor keeps moving while AppKit draws.
+        let current = surfaceMotion.snapshot()
+#if DEBUG
+        debugCloseSurface = current.size
+#endif
         let image = NSImage(size: view.bounds.size)
         image.addRepresentation(bitmap)
-        let ghost = NSWindow(contentRect: panel.frame, styleMask: .borderless, backing: .buffered, defer: false)
+        let ghost = JotBloomPanel(contentRect: panel.frame, styleMask: .borderless, backing: .buffered, defer: false)
         ghost.isReleasedWhenClosed = false
-        ghost.isOpaque = false
-        ghost.hasShadow = false
-        ghost.backgroundColor = .clear
-        ghost.ignoresMouseEvents = true
-        ghost.level = panel.level
-        ghost.collectionBehavior = panel.collectionBehavior
+        ghost.isOpaque = false; ghost.hasShadow = false
+        ghost.backgroundColor = .clear; ghost.ignoresMouseEvents = true
+        ghost.animationBehavior = .none
+        ghost.level = panel.level; ghost.collectionBehavior = panel.collectionBehavior
         let imageView = NSImageView(frame: view.bounds)
-        imageView.image = image
-        imageView.imageScaling = .scaleAxesIndependently
-        ghost.contentView = imageView
+        imageView.image = image; imageView.imageScaling = .scaleNone
+        imageView.wantsLayer = true
+        ghost.appearance = panel.appearance
+        let material = PanelMaterialView(frame: view.bounds)
+        material.addSubview(imageView)
+        ghost.contentView = material
+        material.layoutSubtreeIfNeeded()
         ghost.alphaValue = panel.alphaValue
+        let motion = material.motion
+        motion.collapsedSize = surfaceMotion.collapsedSize
+        motion.prepare(from: current)
+        closingMotion = motion; closingVisual = ghost
         ghost.orderFrontRegardless()
-        closingVisual = ghost
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.24
-            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.4, 0, 0.6, 1)
-            ghost.animator().alphaValue = 0
-            ghost.animator().setFrame(ghost.frame.offsetBy(dx: 0, dy: 6), display: true)
-        } completionHandler: { [weak self, weak ghost] in
+        motion.attachShadow(ghost.surfaceShadowView)
+        motion.animate(opening: false, to: view.bounds.size) { [weak self, weak ghost, weak imageView] in
             ghost?.close()
-            (ghost?.contentView as? NSImageView)?.image = nil
-            if self?.closingVisual === ghost { self?.closingVisual = nil }
+            imageView?.image = nil
+            if self?.closingVisual === ghost {
+                self?.closingVisual = nil; self?.closingMotion = nil
+            }
         }
+    }
+}
+
+/// Native adaptation of the user-selected DynamicNotchKit HTML approximation.
+/// Reference: mrkai77/DynamicNotchKit @ cd0b3e52d537db115ad3a9d89601f20e0bee8d27 (MIT).
+/// Unlike the library's bouncy(0.4), this uses the accepted preview's actual
+/// response/damping: open .46/.70, close .40/1.0. No intermediate hiding stage.
+@MainActor
+private final class PanelSurfaceMotion {
+    struct Snapshot {
+        var size: CGSize
+        var velocity: CGSize = .zero
+        var radius: CGFloat = 20
+        var radiusVelocity: CGFloat = 0
+        var contentOpacity: CGFloat = 1
+        var opacityVelocity: CGFloat = 0
+        var surfaceLift: CGFloat = 0
+        var liftVelocity: CGFloat = 0
+        var shoulder: CGFloat = 15
+        var shoulderVelocity: CGFloat = 0
+    }
+
+    private struct Track {
+        let start: CGFloat
+        let end: CGFloat
+        let velocity: CGFloat
+        let response: CGFloat
+        let damping: CGFloat
+        let began: CFTimeInterval
+
+        func sample(at time: CFTimeInterval) -> (value: CGFloat, velocity: CGFloat) {
+            let t = CGFloat(max(0, time - began)), w = 2 * CGFloat.pi / response
+            let a = start - end, decay = damping * w, envelope = exp(-decay * t)
+            if damping >= 0.9999 {
+                let b = velocity + w * a
+                return (end + (a + b * t) * envelope, (b - w * (a + b * t)) * envelope)
+            }
+            let frequency = w * sqrt(1 - damping * damping)
+            let b = (velocity + decay * a) / frequency
+            let wave = a * cos(frequency * t) + b * sin(frequency * t)
+            let derivative = frequency * (-a * sin(frequency * t) + b * cos(frequency * t))
+            return (end + envelope * wave, envelope * (derivative - decay * wave))
+        }
+    }
+
+    var collapsedSize = CGSize(width: 175, height: 32)
+    private let body = CAShapeLayer()
+    private let movingShadow = CAShapeLayer()
+    private weak var host: CAShapeLayer?
+    private weak var surface: CALayer?
+    private weak var edge: CALayer?
+    private weak var shadowView: PanelDropShadowView?
+    private var contents: [CALayer] = []
+    private var surfaceColor: CGColor = NSColor.black.cgColor
+    private var layoutSize: CGSize = .zero
+    private var tracks: [Track] = []
+    private var timer: Timer?
+    private var prepared = false
+    private var pendingSnapshot: Snapshot?
+    private var rendered: Snapshot?
+    private var animationStartSize: CGSize?
+    private var completion: (() -> Void)?
+    private var opening = true
+    var isAnimating: Bool { prepared }
+#if DEBUG
+    var debugRenderedSize: CGSize? { rendered?.size }
+    var debugAnimationStartSize: CGSize? { animationStartSize }
+    var debugAnchorIsTopCenter: Bool {
+        guard let path = body.path else { return !prepared }
+        return abs(path.boundingBoxOfPath.midX - layoutSize.width / 2) < 0.001 &&
+            abs(path.boundingBoxOfPath.maxY - layoutSize.height) < 0.001
+    }
+    var debugSurfaceAndMaskAgree: Bool {
+        guard let host, surface?.mask === host else { return false }
+        if prepared { return body.superlayer === surface && body.path == host.path }
+        // finish() removes the moving body and restores a static filled surface.
+        // Comparing its detached, last sampled path with the resting mask is stale.
+        return body.superlayer == nil && movingShadow.superlayer == nil &&
+            host.path == PanelOutline.path(in: CGRect(origin: .zero, size: layoutSize)) &&
+            surface?.backgroundColor == surfaceColor
+    }
+    var debugRenderedLift: CGFloat { 0 }
+    var debugTextHasOriginalScale: Bool {
+        contents.allSatisfy { abs($0.transform.m11 - 1) < 0.0001 && abs($0.transform.m22 - 1) < 0.0001 }
+    }
+    var debugTextHasOriginalWidth: Bool { contents.allSatisfy { abs($0.transform.m11 - 1) < 0.0001 } }
+    var debugContentScaleY: CGFloat { contents.first?.transform.m22 ?? 1 }
+    var debugShoulder: CGFloat { rendered?.shoulder ?? 15 }
+    var debugCanvasContainsSurface: Bool {
+        guard let path = movingShadow.path, let canvas = shadowView?.bounds else { return !prepared }
+        return canvas.insetBy(dx: 1, dy: 1).contains(path.boundingBoxOfPath)
+    }
+#endif
+
+    init() {
+        movingShadow.shadowColor = NSColor.black.cgColor
+        movingShadow.shadowOpacity = 0.30
+        movingShadow.shadowRadius = 10
+        movingShadow.shadowOffset = CGSize(width: 0, height: -4)
+    }
+
+    func configure(surface: CALayer, contents: [CALayer], edge: CALayer?, color: CGColor) {
+        self.surface = surface; self.contents = contents; self.edge = edge; surfaceColor = color
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        body.fillColor = color; movingShadow.fillColor = color
+        if prepared { installSurface(); render(snapshot()) }
+        CATransaction.commit()
+    }
+
+    func layout(on host: CALayer, size: CGSize) {
+        self.host = host as? CAShapeLayer; layoutSize = size
+        if prepared { render(snapshot()) }
+    }
+
+    func attachShadow(_ view: PanelDropShadowView?) {
+        shadowView = view
+        guard prepared, let view else { return }
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        view.motionActive = true
+        view.layer?.addSublayer(movingShadow)
+        render(snapshot())
+        CATransaction.commit()
+    }
+
+    private func installSurface() {
+        guard let surface else { return }
+        surface.backgroundColor = nil; edge?.opacity = 0
+        if body.superlayer !== surface { surface.insertSublayer(body, at: 0) }
+    }
+
+    func prepare(from state: Snapshot?) {
+        finish()
+        let initial = state ?? Snapshot(size: collapsedSize, radius: 14, contentOpacity: 0, shoulder: 6)
+        prepared = true; pendingSnapshot = initial
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        installSurface(); render(initial)
+        CATransaction.commit()
+    }
+
+    func snapshot() -> Snapshot {
+        if let pendingSnapshot { return pendingSnapshot }
+        guard prepared, tracks.count == 5 else { return Snapshot(size: layoutSize) }
+        let values = tracks.map { $0.sample(at: CACurrentMediaTime()) }
+        return Snapshot(size: CGSize(width: values[0].value, height: values[1].value),
+                        velocity: CGSize(width: values[0].velocity, height: values[1].velocity),
+                        radius: values[2].value, radiusVelocity: values[2].velocity,
+                        contentOpacity: values[3].value, opacityVelocity: values[3].velocity,
+                        shoulder: values[4].value, shoulderVelocity: values[4].velocity)
+    }
+
+    func animate(opening: Bool, to size: CGSize, completion: (() -> Void)? = nil) {
+        let current = snapshot()
+        timer?.invalidate(); self.completion = completion; self.opening = opening
+        animationStartSize = current.size; pendingSnapshot = nil
+        let target = opening ? Snapshot(size: size) : Snapshot(size: collapsedSize, radius: 14, contentOpacity: 0, shoulder: 6)
+        let starts = [current.size.width, current.size.height, current.radius, current.contentOpacity, current.shoulder]
+        let ends = [target.size.width, target.size.height, target.radius, target.contentOpacity, target.shoulder]
+        let velocities = [current.velocity.width, current.velocity.height, current.radiusVelocity, current.opacityVelocity, current.shoulderVelocity]
+        let now = CACurrentMediaTime()
+        tracks = starts.indices.map { Track(start: starts[$0], end: ends[$0], velocity: velocities[$0], response: opening ? 0.46 : 0.40, damping: opening ? 0.70 : 1.0, began: now) }
+        render(current)
+        let timer = Timer(timeInterval: 1 / 120, repeats: true) { [weak self] timer in
+            MainActor.assumeIsolated {
+                guard let self else { timer.invalidate(); return }
+                let state = self.snapshot(); self.render(state)
+                let samples = self.tracks.map { $0.sample(at: CACurrentMediaTime()) }
+                let settled = zip(samples, self.tracks).enumerated().allSatisfy { index, pair in
+                    abs(pair.0.value - pair.1.end) < (index == 3 ? 0.001 : 0.10) &&
+                    abs(pair.0.velocity) < (index == 3 ? 0.005 : 0.8)
+                }
+                if settled {
+                    let done = self.completion; self.completion = nil
+                    // Remove the outgoing visual before restoring the resting surface.
+                    done?(); self.finish()
+                }
+            }
+        }
+        self.timer = timer; RunLoop.main.add(timer, forMode: .common)
+    }
+
+    private func render(_ state: Snapshot) {
+        rendered = state
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        let rect = CGRect(x: (layoutSize.width - max(1, state.size.width)) / 2,
+                          y: layoutSize.height - max(1, state.size.height),
+                          width: max(1, state.size.width), height: max(1, state.size.height))
+        let path = PanelOutline.path(in: rect, radius: state.radius, shoulder: state.shoulder)
+        body.frame = CGRect(origin: .zero, size: layoutSize); body.path = path
+        host?.path = path
+        if let canvas = shadowView?.bounds {
+            movingShadow.frame = canvas
+            let shadowRect = CGRect(x: canvas.midX - rect.width / 2,
+                                    y: canvas.maxY - PanelOutline.canvasPadding - rect.height,
+                                    width: rect.width, height: rect.height)
+            movingShadow.path = PanelOutline.path(in: shadowRect, radius: state.radius, shoulder: state.shoulder)
+            movingShadow.shadowPath = movingShadow.path
+        }
+        // The physical notch supplies the hidden endpoint; only its final seam fades.
+        let visibility = min(1, max(0, (state.size.height - collapsedSize.height) / 16))
+        host?.opacity = Float(visibility); movingShadow.opacity = Float(visibility)
+        setContent(progress: state.contentOpacity)
+        CATransaction.commit()
+    }
+
+    private func setContent(progress: CGFloat) {
+        let p = min(1, max(0, progress)), scale = 0.6 + 0.4 * p
+        for layer in contents {
+            layer.opacity = Float(p)
+            // Independent top-anchored content transition: no horizontal stretch
+            // and no whole-window transform. At rest the text is pixel-native.
+            let top = layer.isGeometryFlipped ? layer.bounds.minY : layer.bounds.maxY
+            let anchor = layer.bounds.minY + layer.bounds.height * layer.anchorPoint.y
+            let translation = (top - anchor) * (1 - scale)
+            layer.transform = CATransform3DConcat(CATransform3DMakeScale(1, scale, 1), CATransform3DMakeTranslation(0, translation, 0))
+            if p < 0.999, let blur = CIFilter(name: "CIGaussianBlur") {
+                blur.setValue(10 * (1 - p), forKey: kCIInputRadiusKey)
+                layer.filters = [blur]
+            } else { layer.filters = nil }
+        }
+    }
+
+    func withoutMask(_ bodyAction: () -> Void) {
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        let oldMask = surface?.mask, background = surface?.backgroundColor, oldEdge = edge?.opacity ?? 1
+        let values = contents.map { ($0.opacity, $0.transform, $0.filters) }
+        surface?.mask = nil; surface?.backgroundColor = nil; edge?.opacity = 0; body.isHidden = true
+        for layer in contents { layer.opacity = 1; layer.transform = CATransform3DIdentity; layer.filters = nil }
+        bodyAction()
+        surface?.mask = oldMask; surface?.backgroundColor = background; edge?.opacity = oldEdge; body.isHidden = false
+        for (layer, value) in zip(contents, values) { layer.opacity = value.0; layer.transform = value.1; layer.filters = value.2 }
+        CATransaction.commit()
+    }
+
+    func finish() {
+        timer?.invalidate(); timer = nil; completion = nil
+        tracks = []; prepared = false; pendingSnapshot = nil; rendered = nil
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        host?.path = PanelOutline.path(in: CGRect(origin: .zero, size: layoutSize)); host?.opacity = 1
+        for layer in contents { layer.opacity = 1; layer.transform = CATransform3DIdentity; layer.filters = nil }
+        body.removeFromSuperlayer(); movingShadow.removeFromSuperlayer()
+        surface?.backgroundColor = surfaceColor; edge?.opacity = 1
+        shadowView?.motionActive = false; shadowView = nil
+        CATransaction.commit()
     }
 }
 
 private final class JotBloomPanel: NSPanel {
     private var softShadowWindow: NSWindow?
+    var surfaceShadowView: PanelDropShadowView? {
+        softShadowWindow?.contentView?.wantsLayer = true
+        return softShadowWindow?.contentView as? PanelDropShadowView
+    }
+    override var appearance: NSAppearance? { didSet { softShadowWindow?.appearance = appearance; softShadowWindow?.contentView?.needsDisplay = true } }
     override var alphaValue: CGFloat { didSet { softShadowWindow?.alphaValue = alphaValue } }
     override func setFrame(_ frameRect: NSRect, display flag: Bool) {
         super.setFrame(frameRect, display: flag)
-        softShadowWindow?.setFrame(frame.insetBy(dx: -18, dy: -18), display: flag)
+        softShadowWindow?.setFrame(frame.insetBy(dx: -PanelOutline.canvasPadding, dy: -PanelOutline.canvasPadding), display: flag)
     }
     override func orderFrontRegardless() {
         super.orderFrontRegardless()
         if softShadowWindow == nil {
-            let shadow = PanelShadowWindow(contentRect: frame.insetBy(dx: -18, dy: -18), styleMask: .borderless, backing: .buffered, defer: false)
+            let shadow = PanelShadowWindow(contentRect: frame.insetBy(dx: -PanelOutline.canvasPadding, dy: -PanelOutline.canvasPadding), styleMask: .borderless, backing: .buffered, defer: false)
             shadow.isReleasedWhenClosed = false
             shadow.animationBehavior = .none
             shadow.isOpaque = false; shadow.backgroundColor = .clear; shadow.hasShadow = false
@@ -2472,8 +2940,9 @@ private final class JotBloomPanel: NSPanel {
         }
         // AppKit can detach an ordered-out child; restore the relationship on every show.
         if let shadow = softShadowWindow, shadow.parent !== self { addChildWindow(shadow, ordered: .below) }
-        softShadowWindow?.setFrame(frame.insetBy(dx: -18, dy: -18), display: true)
+        softShadowWindow?.setFrame(frame.insetBy(dx: -PanelOutline.canvasPadding, dy: -PanelOutline.canvasPadding), display: true)
         softShadowWindow?.alphaValue = alphaValue
+        softShadowWindow?.appearance = appearance
         softShadowWindow?.order(.below, relativeTo: windowNumber)
     }
     override func orderOut(_ sender: Any?) {
@@ -2723,6 +3192,7 @@ private final class JotBloomPanel: NSPanel {
 
 private final class PanelMaterialView: NSView {
     private let outlineMask = CAShapeLayer()
+    let motion = PanelSurfaceMotion()
     private let edgeView = PanelEdgeView(frame: .zero)
 
     override func viewDidChangeEffectiveAppearance() {
@@ -2739,39 +3209,52 @@ private final class PanelMaterialView: NSView {
         }
         // Explicit geometry also survives AppKit's cached rendering used for dismissal.
         // A cornerRadius + maskedCorners layer was rounded on all corners in that path.
-        let radius: CGFloat = 20
-        let path = CGMutablePath()
-        path.move(to: CGPoint(x: 0, y: bounds.height))
-        path.addLine(to: CGPoint(x: bounds.width, y: bounds.height))
-        path.addLine(to: CGPoint(x: bounds.width, y: radius))
-        path.addQuadCurve(to: CGPoint(x: bounds.width - radius, y: 0), control: CGPoint(x: bounds.width, y: 0))
-        path.addLine(to: CGPoint(x: radius, y: 0))
-        path.addQuadCurve(to: CGPoint(x: 0, y: radius), control: .zero)
-        path.closeSubpath()
+        let path = PanelOutline.path(in: bounds)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         outlineMask.frame = bounds
         outlineMask.path = path
         layer?.cornerRadius = 0
         layer?.mask = outlineMask
-        CATransaction.commit()
         layer?.masksToBounds = true
         if edgeView.superview == nil { addSubview(edgeView) }
         edgeView.frame = bounds
         edgeView.needsDisplay = true
+        edgeView.wantsLayer = true
+        let contentLayers = subviews.filter { $0 !== edgeView }.compactMap { view -> CALayer? in
+            view.wantsLayer = true
+            return view.layer
+        }
+        if let layer, let color = layer.backgroundColor {
+            motion.configure(surface: layer, contents: contentLayers, edge: edgeView.layer, color: color)
+        }
+        motion.layout(on: outlineMask, size: bounds.size)
+        CATransaction.commit()
     }
 }
 
-/// A square top and rounded bottom, shared by the visible rim and the soft shadow.
+/// Body dimensions exclude the outward shoulders, preserving the existing 640pt
+/// content proposal. Every surface uses this same top-attached inverse curve.
+/// Geometry is independently implemented from the selected HTML reference.
 private enum PanelOutline {
-    static func path(in rect: NSRect, radius: CGFloat = 20) -> CGPath {
+    static let canvasPadding: CGFloat = 64
+    static func path(in rect: NSRect, radius: CGFloat = 20, shoulder: CGFloat = 15) -> CGPath {
+        let s = max(0, min(shoulder, rect.height * 0.45))
+        let r = max(0, min(radius, rect.height - s, rect.width / 2))
         let path = CGMutablePath()
-        path.move(to: .init(x: rect.minX, y: rect.maxY))
-        path.addLine(to: .init(x: rect.maxX, y: rect.maxY))
-        path.addLine(to: .init(x: rect.maxX, y: rect.minY + radius))
-        path.addQuadCurve(to: .init(x: rect.maxX - radius, y: rect.minY), control: .init(x: rect.maxX, y: rect.minY))
-        path.addLine(to: .init(x: rect.minX + radius, y: rect.minY))
-        path.addQuadCurve(to: .init(x: rect.minX, y: rect.minY + radius), control: .init(x: rect.minX, y: rect.minY))
+        path.move(to: .init(x: rect.minX - s, y: rect.maxY))
+        path.addLine(to: .init(x: rect.maxX + s, y: rect.maxY))
+        path.addCurve(to: .init(x: rect.maxX, y: rect.maxY - s),
+                      control1: .init(x: rect.maxX + s * 0.36, y: rect.maxY),
+                      control2: .init(x: rect.maxX, y: rect.maxY - s * 0.4))
+        path.addLine(to: .init(x: rect.maxX, y: rect.minY + r))
+        path.addQuadCurve(to: .init(x: rect.maxX - r, y: rect.minY), control: .init(x: rect.maxX, y: rect.minY))
+        path.addLine(to: .init(x: rect.minX + r, y: rect.minY))
+        path.addQuadCurve(to: .init(x: rect.minX, y: rect.minY + r), control: .init(x: rect.minX, y: rect.minY))
+        path.addLine(to: .init(x: rect.minX, y: rect.maxY - s))
+        path.addCurve(to: .init(x: rect.minX - s, y: rect.maxY),
+                      control1: .init(x: rect.minX, y: rect.maxY - s * 0.4),
+                      control2: .init(x: rect.minX - s * 0.36, y: rect.maxY))
         path.closeSubpath()
         return path
     }
@@ -2795,21 +3278,26 @@ private final class PanelEdgeView: NSView {
 }
 
 private final class PanelDropShadowView: NSView {
+    var motionActive = false {
+        didSet { if motionActive != oldValue { needsDisplay = true; displayIfNeeded() } }
+    }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
     override func draw(_ dirtyRect: NSRect) {
-        guard let context = NSGraphicsContext.current?.cgContext else { return }
+        guard !motionActive, let context = NSGraphicsContext.current?.cgContext else { return }
         context.saveGState()
-        // Keep the panel interior transparent: its fade-in must not reveal a black plate.
-        context.addRect(bounds)
-        context.addPath(PanelOutline.path(in: bounds.insetBy(dx: 18, dy: 18)))
-        context.clip(using: .evenOdd)
+        // The opaque surface in this noninteractive child also supplies the
+        // outward shoulders and spring overshoot outside the input window.
+        let rect = bounds.insetBy(dx: PanelOutline.canvasPadding, dy: PanelOutline.canvasPadding)
         let shadow = NSShadow()
         shadow.shadowColor = NSColor.black.withAlphaComponent(0.30)
         shadow.shadowBlurRadius = 10
         shadow.shadowOffset = .init(width: 0, height: -4)
         shadow.set()
-        context.addPath(PanelOutline.path(in: bounds.insetBy(dx: 18, dy: 18)))
-        context.setFillColor(NSColor.black.cgColor); context.fillPath()
+        context.addPath(PanelOutline.path(in: rect))
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            context.setFillColor(NSColor(BloomTheme.surface).cgColor)
+        }
+        context.fillPath()
         context.restoreGState()
     }
 }

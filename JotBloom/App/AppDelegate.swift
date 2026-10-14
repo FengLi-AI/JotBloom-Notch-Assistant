@@ -236,6 +236,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             service: clipboardService,
             pasteboardWriter: pasteboardClient
         )
+#if DEBUG
+        if settingsAreIsolated, ProcessInfo.processInfo.environment["JOTBLOOM_SURFACE_PREVIEW"] == "1" {
+                for (index, text) in ["记录想法，然后继续手头的事。", "从顶部中央展开，柔和地回到原位。", "快速开合也沿着当前状态接续。", "文字保持原尺寸，最终布局保持一致。", "这是一份隔离的演示数据。", "按 ⌃⌥⌘M 再次开合；Esc 收起。"].enumerated() {
+                    _ = try? store.upsertClipboardTextSynchronously(text: text, contentType: .text,
+                        copiedAtUTCms: Int64(Date().timeIntervalSince1970 * 1000) + Int64(index),
+                        sourceApplication: ClipboardSourceApplication(name: "动效演示", bundleIdentifier: "test.motion"))
+                }
+        }
+#endif
         clipboardViewModel.start()
         let globalSearchViewModel = GlobalSearchViewModel(
             store: store,
@@ -446,6 +455,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             registeredShortcut = Shortcut(keyCode: UInt32(kVK_F19), modifiers: UInt32(controlKey | optionKey | shiftKey), label: "⌃⌥⇧F19")
         }
 #endif
+#if DEBUG
+        if settingsAreIsolated, ProcessInfo.processInfo.environment["JOTBLOOM_SURFACE_PREVIEW"] == "1" {
+            registeredShortcut = Shortcut(keyCode: UInt32(kVK_ANSI_M), modifiers: UInt32(controlKey | optionKey | cmdKey), label: "⌃⌥⌘M")
+        }
+#endif
         let hotKeyStatus = hotKeyManager.register(registeredShortcut)
         if hotKeyStatus != noErr {
             logger.error("Default hot key registration failed with status: \(hotKeyStatus, privacy: .public)")
@@ -505,7 +519,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ))
 
 #if DEBUG
-        if ProcessInfo.processInfo.environment["JOTBLOOM_UI_WALKTHROUGH"] != "1" { hotZoneController.start() }
+        if ProcessInfo.processInfo.environment["JOTBLOOM_UI_WALKTHROUGH"] != "1",
+           (ProcessInfo.processInfo.environment["JOTBLOOM_SURFACE_PREVIEW"] != "1" || ProcessInfo.processInfo.environment["JOTBLOOM_DYNAMIC_PREVIEW"] == "1") { hotZoneController.start() }
 #else
         hotZoneController.start()
 #endif
@@ -531,18 +546,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 #if DEBUG
         if ProcessInfo.processInfo.environment["JOTBLOOM_UI_REVIEW"] == "1", settingsAreIsolated {
+            if ProcessInfo.processInfo.environment["JOTBLOOM_SURFACE_PREVIEW"] == "1" {
+                panelController.debugConfigureSurfacePreview()
+            }
             coordinator.show()
             if ProcessInfo.processInfo.environment["JOTBLOOM_REVIEW_SMOKE"] == "1" {
                 Task { @MainActor in
                     do {
                         let checks: [(String, Bool)]
-                        if ProcessInfo.processInfo.environment["JOTBLOOM_PRESENTATION_SMOKE"] == "1" {
+                        if ProcessInfo.processInfo.environment["JOTBLOOM_DYNAMIC_SMOKE"] == "1" {
+                            checks = try await panelController.debugDynamicMotionProbe(toggle: { coordinator.toggle() })
+                        } else if ProcessInfo.processInfo.environment["JOTBLOOM_SURFACE_SMOKE"] == "1" {
+                            checks = try await panelController.debugSurfaceMotionProbe(toggle: { coordinator.toggle() })
+                        } else if ProcessInfo.processInfo.environment["JOTBLOOM_PRESENTATION_SMOKE"] == "1" {
                             checks = try await panelController.debugPresentationProbe(toggle: { hotZoneController.debugActivate() })
                         } else {
                             checks = try await panelController.debugReviewLifecycleProbe(show: { coordinator.show() }, toggle: { coordinator.toggle() })
                         }
                         for (name, passed) in checks { print("JOTBLOOM_REVIEW \(name)=\(passed)") }
-                        fflush(stdout); exit(checks.allSatisfy(\.1) ? 0 : 1)
+                        fflush(stdout)
+                        if ProcessInfo.processInfo.environment["JOTBLOOM_DYNAMIC_SMOKE"] != "1" { exit(checks.allSatisfy(\.1) ? 0 : 1) }
                     } catch { print("JOTBLOOM_REVIEW error=\(error)"); fflush(stdout); exit(1) }
                 }
             }
