@@ -4,7 +4,7 @@ set -euo pipefail
 umask 022
 export COPYFILE_DISABLE=1
 app_name='萌生｜JotBloom.app'
-package_name='JotBloom-1.0.9-universal.dmg'
+package_name='JotBloom-1.1.0-universal.dmg'
 project_dir="$(cd "$(dirname "$0")/.." && pwd)"
 output_dir="${1:?Usage: bash scripts/package-preview.sh NEW_ABSOLUTE_OUTPUT_DIRECTORY}"
 case "$output_dir" in /*) ;; *) echo 'Output must be an absolute path.' >&2; exit 2;; esac
@@ -17,11 +17,11 @@ mount_dir="$(mktemp -d /tmp/jotbloom-release-mount.XXXXXX)"
 mounted=0
 cleanup() { if [ "$mounted" -eq 1 ]; then hdiutil detach "$mount_dir" >/dev/null || true; fi; }
 trap cleanup EXIT
-echo 'Building v1.0.9 (1.0.9 build 1111); does not publish automatically.'
+echo 'Building v1.1.0 (1.1.0 build 1112); does not publish automatically.'
 xcodebuild -project "$project_dir/JotBloom.xcodeproj" -scheme JotBloom \
   -configuration Release -destination 'generic/platform=macOS' -derivedDataPath "$build_dir" \
   ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- \
-  MARKETING_VERSION=1.0.9 CURRENT_PROJECT_VERSION=1111 build > "$output_dir/build.log" 2>&1
+  MARKETING_VERSION=1.1.0 CURRENT_PROJECT_VERSION=1112 build > "$output_dir/build.log" 2>&1
 app="$build_dir/Build/Products/Release/$app_name"
 codesign --verify --deep --strict --verbose=2 "$app" > "$output_dir/signature.log" 2>&1
 lipo -archs "$app/Contents/MacOS/JotBloom" > "$output_dir/architectures.txt"
@@ -44,14 +44,17 @@ test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleDisplayName' "$mount_dir/$app_
 test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleName' "$mount_dir/$app_name/Contents/Info.plist")" = '萌生｜JotBloom'
 test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleIconFile' "$mount_dir/$app_name/Contents/Info.plist")" = 'AppIcon.icns'
 test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$mount_dir/$app_name/Contents/Info.plist")" = 'com.jotbloom.mengsheng'
-test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$mount_dir/$app_name/Contents/Info.plist")" = '1.0.9'
-test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' "$mount_dir/$app_name/Contents/Info.plist")" = '1111'
+test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$mount_dir/$app_name/Contents/Info.plist")" = '1.1.0'
+test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' "$mount_dir/$app_name/Contents/Info.plist")" = '1112'
 if /usr/libexec/PlistBuddy -c 'Print JotBloomPreviewEnvironment' "$mount_dir/$app_name/Contents/Info.plist" >/dev/null 2>&1; then
   echo 'Unexpected candidate preview configuration in production app.' >&2; exit 1
 fi
 find "$mount_dir" -type f -print > "$output_dir/bundle-inventory.txt"
-if [ -n "$(find "$mount_dir/$app_name" -type f \( -name '*.sqlite*' -o -name '*.log' -o -name '.env*' -o -name '._*' \) -print -quit)" ]; then
+if [ -n "$(find "$mount_dir/$app_name" -type f \( -name '*.sqlite*' -o -name '*.log' -o -name '.env*' -o -name '._*' -o -name '*.command' -o -name '*Smoke*' -o -name '*Preview.swift' -o -name '*DevelopmentLauncher*' -o -name 'launch-assistant-*' -o -name 'preview-assistant-*' \) -print -quit)" ]; then
   echo 'Unexpected development/data file in app bundle.' >&2; exit 1
+fi
+if [ -n "$(find "$mount_dir" -type d \( -name '助手版' -o -name 'JotBloomTests' \) -print -quit)" ]; then
+  echo 'Unexpected development documents or tests in installer.' >&2; exit 1
 fi
 /usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$mount_dir/$app_name/Contents/Info.plist" > "$output_dir/version.txt"
 /usr/libexec/PlistBuddy -c 'Print CFBundleVersion' "$mount_dir/$app_name/Contents/Info.plist" >> "$output_dir/version.txt"

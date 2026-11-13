@@ -39,6 +39,20 @@ public final class ChatViewModel: ObservableObject {
     public var onSystemInteraction: ((Bool) -> Void)?
     public var onAccepted: (() -> Void)?
     public var onOpenSettings: (() -> Void)?
+    public var onRoute: ((ChatTurn, [ChatTurn], Bool) async throws -> AssistantChatResult)?
+    @Published public private(set) var savedNote: (turn: String, id: Int64)?
+    public func undoNote() {
+        guard !busy, let savedNote else { return }
+        Task {
+            do {
+                try await store.undoAssistantNote(id: savedNote.id, turn: savedNote.turn)
+                if let index = turns.firstIndex(where: { $0.token == savedNote.turn }) { turns[index].answer = "已撤销保存灵感。" }
+                self.savedNote = nil
+            } catch { feedback = "这条灵感已被修改或删除，无法撤销。" }
+        }
+    }
+    public var onSubmitTask: ((String, [AssistantAttachment], String, String, String) async throws -> ChatTurn)?
+    @Published public private(set) var attachments: [AssistantAttachment] = []
     let store: JotBloomStore
     private let credentials: any CredentialStoring
     let configuration: () -> ModelConfiguration
@@ -65,7 +79,7 @@ public final class ChatViewModel: ObservableObject {
     }
     deinit { task?.cancel(); draftTask?.cancel() }
     public var configured: Bool { !configuration().baseURL.isEmpty && !configuration().model.isEmpty }
-    public var canSend: Bool { ready && !busy && !summaryPreview && !confirmingDelete && unsaved == nil && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    public var canSend: Bool { ready && !busy && !summaryPreview && !confirmingDelete && unsaved == nil && (!draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty) }
     public var canRetry: Bool { ready && !busy && !confirmingDelete && unsaved == nil && turns.last.map { !$0.status.isActive && $0.status != .complete } == true }
     public var needsStorageRetry: Bool { unsaved != nil }
     public func start() async {
@@ -75,6 +89,7 @@ public final class ChatViewModel: ObservableObject {
             let page = try await store.chatPage(recover: true)
             let saved = try await store.loadDraft(kind: .aiChat)
             try await refreshSessions()
+            attachments = try store.assistantDraftAttachments(session: currentSession)
             turns = page.turns; hasMore = page.hasMore
             applying = true; draft = saved?.content ?? ""; applying = false; ready = true
         } catch { feedback = ChatError.storage.localizedDescription }
@@ -91,6 +106,7 @@ public final class ChatViewModel: ObservableObject {
             catch { feedback = "历史读取未完成，请重试。" }
         }
     }
+    public var canLeaveAssistantConversation: Bool { ready && !summaryPreview && !summarizing && !confirmingDelete }
     public var canManageSessions: Bool { ready && !busy && !summaryPreview && !loadingMore && unsaved == nil }
     public func refreshSessions() async throws {
         sessions = try await store.chatSessions()
@@ -111,7 +127,36 @@ public final class ChatViewModel: ObservableObject {
     }
     public func send() {
         guard canSend else { return }
+        if !attachments.isEmpty { sendAttachments(); return }
         begin(input: draft, retry: nil, source: .aiChat, accepted: {}, rejected: { _ in })
+    }
+    public func addAttachments(_ values: [AssistantAttachment]) {
+        guard ready, !busy else { return }
+        var seen = Set(attachments.map(\.id))
+        let next = attachments + values.filter { seen.insert($0.id).inserted }
+        do { try store.saveAssistantDraftAttachments(next, session: currentSession); attachments = next }
+        catch { feedback = "附件未保存，请检查磁盘后重试。" }
+    }
+    public func removeAttachment(_ id: String) {
+        guard !busy else { return }
+        let next = attachments.filter { $0.id != id }
+        do { try store.saveAssistantDraftAttachments(next, session: currentSession); attachments = next }
+        catch { feedback = "附件未移除，请重试。" }
+    }
+    private func sendAttachments() {
+        guard configured else { feedback = "先配置模型，助手才能理解任务。草稿和附件已保留。"; return }
+        guard let onSubmitTask else { feedback = "任务入口暂不可用，草稿和附件已保留。"; return }
+        busy = true; draftPaused = true; draftTask?.cancel(); savedNote = nil
+        let text = draft, materials = attachments, revision = draftRevision, session = currentSession
+        task = Task {
+            defer { busy = false; draftPaused = false; task = nil; persistDraftLater() }
+            do {
+                let row = try await onSubmitTask(text, materials, UUID().uuidString, session, defaultSystemPrompt())
+                replace(row); attachments = []
+                if draftRevision == revision { applying = true; draft = ""; applying = false }
+                try? await refreshSessions(); feedback = nil; onAccepted?()
+            } catch { feedback = "没能保存任务，草稿和附件已保留，请重试。" }
+        }
     }
     public func sendFromInspiration(_ text: String) async throws {
         guard ready, !busy, !summaryPreview, unsaved == nil else { throw ChatError.busy }
@@ -131,7 +176,7 @@ public final class ChatViewModel: ObservableObject {
     private func begin(input: String, retry: ChatTurn?, source: DraftKind?, accepted: @escaping () -> Void,
                        rejected: @escaping (Error) -> Void) {
         guard ready, !busy, !summaryPreview, unsaved == nil else { rejected(ChatError.busy); return }
-        busy = true; stopRequested = false; feedback = nil
+        busy = true; stopRequested = false; feedback = nil; savedNote = nil
         let revision = draftRevision
         if source == .aiChat { draftPaused = true; draftTask?.cancel() }
         task = Task { [self] in
@@ -162,6 +207,15 @@ public final class ChatViewModel: ObservableObject {
                 }
                 accepted(); onAccepted?()
                 try Task.checkCancellation()
+                if retry == nil, let onRoute {
+                    let routed = try await onRoute(row, history, source != .inspiration)
+                    if case .handled(let finished, let noteID) = routed {
+                        active = finished; replace(finished)
+                        if let noteID { savedNote = (finished.token, noteID); onSummaryCreated?(noteID) }
+                        try? await refreshSessions(); return
+                    }
+                    try Task.checkCancellation()
+                }
                 lastPersist = ProcessInfo.processInfo.systemUptime
                 receivedText = false
                 for attempt in 0...1 {
@@ -281,6 +335,7 @@ public final class ChatViewModel: ObservableObject {
                 let page = try await store.chatPage()
                 let saved = try await store.loadDraft(kind: .aiChat)
                 try await refreshSessions()
+                attachments = try store.assistantDraftAttachments(session: currentSession)
                 turns = page.turns; hasMore = page.hasMore; scrollAnchor = nil; scrollOffset = nil; prependAnchor = nil; followingLatest = true
                 applying = true; draft = saved?.content ?? ""; applying = false
                 ready = true; showingHistory = false

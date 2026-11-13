@@ -2,7 +2,7 @@ import Foundation
 import SQLite3
 
 public enum DatabaseMigrator {
-    public static let currentVersion: Int32 = 8
+    public static let currentVersion: Int32 = 12
 
     static func preflight(_ connection: SQLiteConnection) throws -> Int32 {
         try mapCorruption {
@@ -37,6 +37,14 @@ public enum DatabaseMigrator {
                 try validateVersionSeven(connection)
             case 8:
                 try validateVersionEight(connection)
+            case 9:
+                try validateVersionNine(connection)
+            case 10:
+                try validateVersionTen(connection)
+            case 11:
+                try validateVersionEleven(connection)
+            case 12:
+                try validateVersionTwelve(connection)
             default:
                 throw PersistenceError.invalidSchema(object: "migration_path")
             }
@@ -80,6 +88,14 @@ public enum DatabaseMigrator {
                 try validateVersionSeven(connection)
             case 8:
                 try validateVersionEight(connection)
+            case 9:
+                try validateVersionNine(connection)
+            case 10:
+                try validateVersionTen(connection)
+            case 11:
+                try validateVersionEleven(connection)
+            case 12:
+                try validateVersionTwelve(connection)
             default:
                 throw PersistenceError.invalidSchema(object: "migration_path")
             }
@@ -93,10 +109,14 @@ public enum DatabaseMigrator {
                     try validateVersionEight(connection)
                 }
             }
+            if version < 9 { try migrateVersionEightToNine(connection) }
+            if version < 10 { try migrateVersionNineToTen(connection) }
+            if version < 11 { try migrateVersionTenToEleven(connection) }
+            if version < 12 { try migrateVersionElevenToTwelve(connection) }
         }
     }
 
-    private static func validateVersionEight(_ db: SQLiteConnection) throws {
+    static func validateVersionEight(_ db: SQLiteConnection) throws {
         try validateVersionSeven(db)
         _ = try db.prepare("SELECT id,payload,sort_order FROM file_shelf LIMIT 0", operation: "validate_file_shelf")
     }
@@ -163,7 +183,7 @@ public enum DatabaseMigrator {
         }
     }
 
-    private static func migrateVersionSixToSeven(_ db: SQLiteConnection) throws {
+    static func migrateVersionSixToSeven(_ db: SQLiteConnection) throws {
         try db.transaction {
             try db.execute("""
                 ALTER TABLE inspirations ADD COLUMN title_source TEXT NOT NULL DEFAULT 'fallback' CHECK(title_source IN ('ai','fallback','user'));

@@ -37,7 +37,8 @@ struct PanelChromeView: View {
                 BloomTabButton(slot: slot,
                     selected: state.fileShelfPreview ? slot == .fileShelf : !state.isSettingsOpen && state.selectedTab.rawValue == slot.rawValue,
                     height: max(14, min(24, state.notchHeight - 8)),
-                    position: (state.preferences.order.firstIndex(of: slot) ?? 0) + 1) {
+                    position: (state.preferences.order.firstIndex(of: slot) ?? 0) + 1,
+                    attention: slot == .chat && state.assistantNeedsAttention) {
                     if let tab = PanelTab(rawValue: slot.rawValue) { onSelectTab(tab) }
                 }
             }
@@ -50,6 +51,7 @@ private struct BloomTabButton: View {
     let selected: Bool
     let height: CGFloat
     let position: Int
+    var attention = false
     let action: () -> Void
     @State private var hovering = false
 
@@ -70,6 +72,9 @@ private struct BloomTabButton: View {
             .foregroundStyle(!slot.isAvailable ? BloomTheme.muted.opacity(0.35) : selected ? Color.white : BloomTheme.muted)
             .background { if selected { BloomSelectionSurface(radius: 9) } else { RoundedRectangle(cornerRadius: 9).fill(hovering ? BloomTheme.surface : .clear) } }
             .contentShape(Capsule())
+        }
+        .overlay(alignment: .topTrailing) {
+            if attention { Circle().fill(IslandTheme.statusOrange).frame(width: 4, height: 4).allowsHitTesting(false) }
         }
         .buttonStyle(.plain).disabled(!slot.isAvailable).onHover { hovering = $0 }
         .help(slot.isAvailable ? "\(slot.title) · ⌘\(position)" : "\(slot.title) · 后续阶段开放")

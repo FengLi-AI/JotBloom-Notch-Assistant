@@ -18,6 +18,8 @@ struct PanelRootView: View {
     var settingsModel: SettingsViewModel? = nil
     var promptModel: PromptLibraryViewModel? = nil
     var chatModel: ChatViewModel? = nil
+    var assistantModel: AssistantViewModel? = nil
+    var onHandInspiration: ((Inspiration) -> Void)? = nil
     var fileShelfModel: FileShelfViewModel? = nil
     var fileShelfDrag: FileShelfDragController? = nil
     var onChatCopy: (String) -> Bool = { _ in false }
@@ -43,12 +45,13 @@ struct PanelRootView: View {
             if (panelState.fileShelfPreview || (!panelState.isSettingsOpen && panelState.selectedTab == .fileShelf)), let fileShelfModel, let fileShelfDrag {
                 FileShelfView(model: fileShelfModel, drag: fileShelfDrag)
             } else if panelState.isSettingsOpen {
-                PanelSettingsView(state: panelState, dataDirectory: dataDirectory, onBack: onCloseSettings, model: settingsModel)
+                PanelSettingsView(state: panelState, dataDirectory: dataDirectory, onBack: onCloseSettings, model: settingsModel, assistantModel: assistantModel)
             } else if isInspirationDetailVisible {
                 InspirationDetailView(
                     viewModel: inspirationLibraryViewModel,
                     onBack: onReturnFromInspirationDetail,
-                    backDestinationName: detailBackDestinationName
+                    backDestinationName: detailBackDestinationName,
+                    onHandToAssistant: onHandInspiration
                 )
             } else {
                 switch panelState.selectedTab {
@@ -64,11 +67,14 @@ struct PanelRootView: View {
                 case .prompts:
                     if let promptModel { PromptLibraryView(model: promptModel) }
                 case .chat:
-                    if let chatModel { ChatView(model: chatModel, onCopy: onChatCopy) }
+                    if let chatModel, let assistantModel {
+                        AssistantRootView(model: assistantModel, chat: chatModel, panel: panelState, onCopy: onChatCopy)
+                    } else if let chatModel { ChatView(model: chatModel, onCopy: onChatCopy) }
                 case .inspirationLibrary:
                     InspirationLibraryView(
                         viewModel: inspirationLibraryViewModel,
-                        onOpen: onOpenLibraryInspiration
+                        onOpen: onOpenLibraryInspiration,
+                        onHandToAssistant: onHandInspiration
                     )
                 case .globalSearch:
                     GlobalSearchView(viewModel: globalSearchViewModel)

@@ -13,6 +13,7 @@ final class FileShelfDragController: ObservableObject {
     var onActivity: (Bool) -> Void = { _ in }
     var onExternalHandoff: () -> Void = {}
     var panelFrame: () -> NSRect = { .zero }
+    var additionalDropFrame: () -> NSRect = { .zero }
     var onHotZoneRefresh: () -> Void = {}
     @Published private(set) var hovering = false
     private(set) var active = false
@@ -65,7 +66,7 @@ final class FileShelfDragController: ObservableObject {
     private func checkLocation() {
         guard active, !committing else { return }
         let pointer = NSEvent.mouseLocation
-        let outside = !notch.insetBy(dx: -3, dy: -3).contains(pointer) && !panelFrame().contains(pointer)
+        let outside = !notch.insetBy(dx: -3, dy: -3).contains(pointer) && !panelFrame().contains(pointer) && !additionalDropFrame().contains(pointer)
         if NSEvent.pressedMouseButtons == 0 || outside {
             let now = ProcessInfo.processInfo.systemUptime
             if let start = outsideSince, now - start > 0.18 { finish(cancelled: true) }

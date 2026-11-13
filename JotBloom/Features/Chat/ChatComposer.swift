@@ -6,6 +6,8 @@ struct ChatComposer: NSViewRepresentable {
     var focusRequest: Int
     var enabled: Bool
     var onSend: () -> Void
+    var onFiles: (([URL]) -> Void)? = nil
+    var onHover: (Bool) -> Void = { _ in }
     func makeCoordinator() -> Coordinator { Coordinator(self) }
     func makeNSView(context: Context) -> NSScrollView {
         let scroll = NSScrollView()
@@ -18,15 +20,16 @@ struct ChatComposer: NSViewRepresentable {
         editor.isVerticallyResizable = true; editor.isHorizontallyResizable = false
         editor.autoresizingMask = [.width]; editor.textContainer?.widthTracksTextView = true
         editor.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
-        editor.delegate = context.coordinator; editor.send = onSend
-        editor.setAccessibilityLabel("对话输入，回车发送，Shift 回车换行")
+        editor.delegate = context.coordinator; editor.send = onSend; editor.receiveFiles = onFiles; editor.hover = onHover
+        editor.registerForDraggedTypes([.fileURL])
+        editor.setAccessibilityLabel("助手输入，回车发送，Shift 回车换行")
         scroll.documentView = editor
         return scroll
     }
     func updateNSView(_ view: NSScrollView, context: Context) {
         context.coordinator.parent = self
         guard let editor = view.documentView as? ChatTextView else { return }
-        editor.send = onSend; editor.isEditable = enabled
+        editor.send = onSend; editor.receiveFiles = onFiles; editor.hover = onHover; editor.isEditable = enabled
         editor.textColor = NSColor(BloomTheme.text)
         editor.insertionPointColor = NSColor(BloomTheme.blue)
         if !editor.hasMarkedText(), editor.string != text { editor.string = text }
@@ -48,6 +51,38 @@ struct ChatComposer: NSViewRepresentable {
 
 final class ChatTextView: NSTextView {
     var send: (() -> Void)?
+    var receiveFiles: (([URL]) -> Void)?
+    var hover: (Bool) -> Void = { _ in }
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        if sender.draggingPasteboard.types?.contains(.fileURL) == true { return draggingUpdated(sender) }
+        let operation = super.draggingEntered(sender)
+        hover(!operation.isEmpty); return operation
+    }
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        if sender.draggingPasteboard.types?.contains(.fileURL) == true {
+            let accepts = isEditable && receiveFiles != nil && sender.draggingSourceOperationMask.contains(.copy)
+            hover(accepts); return accepts ? .copy : []
+        }
+        let operation = super.draggingUpdated(sender)
+        hover(!operation.isEmpty); return operation
+    }
+    override func draggingExited(_ sender: NSDraggingInfo?) { hover(false); super.draggingExited(sender) }
+    override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        if sender.draggingPasteboard.types?.contains(.fileURL) == true {
+            return isEditable && receiveFiles != nil && sender.draggingSourceOperationMask.contains(.copy)
+        }
+        return super.prepareForDragOperation(sender)
+    }
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        defer { hover(false) }
+        if sender.draggingPasteboard.types?.contains(.fileURL) == true {
+            guard isEditable, let receiveFiles else { return false }
+            let urls = FileShelfDragController.urls(sender.draggingPasteboard)
+            guard !urls.isEmpty else { return false }
+            receiveFiles(urls); return true
+        }
+        return super.performDragOperation(sender)
+    }
     override func keyDown(with event: NSEvent) {
         if event.keyCode == 36 || event.keyCode == 76 {
             if !hasMarkedText(), !event.modifierFlags.contains(.shift) { send?(); return }

@@ -9,6 +9,9 @@ import SwiftUI
 @MainActor
 final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
     var onRequestHide: (() -> Void)?
+#if DEBUG
+    var onDebugSettingsRequest: (() -> Void)?
+#endif
 
     private let logger = Logger(subsystem: "com.jotbloom.mengsheng", category: "panel")
     private let inspirationViewModel: InspirationInputViewModel
@@ -20,6 +23,7 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
     private let settingsModel: SettingsViewModel?
     private let promptModel: PromptLibraryViewModel?
     private let chatModel: ChatViewModel?
+    private let assistantModel: AssistantViewModel?
     private let fileShelfModel: FileShelfViewModel?
     private let fileShelfDrag: FileShelfDragController?
     private var fileDragActive = false
@@ -59,6 +63,7 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         settingsModel: SettingsViewModel? = nil,
         promptModel: PromptLibraryViewModel? = nil,
         chatModel: ChatViewModel? = nil,
+        assistantModel: AssistantViewModel? = nil,
         fileShelfModel: FileShelfViewModel? = nil,
         fileShelfDrag: FileShelfDragController? = nil
     ) {
@@ -70,9 +75,13 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         self.settingsModel = settingsModel
         self.promptModel = promptModel
         self.chatModel = chatModel
+        self.assistantModel = assistantModel
         self.fileShelfModel = fileShelfModel
         self.fileShelfDrag = fileShelfDrag
         super.init()
+        assistantModel?.coordinator.$tasks.sink { [weak self] tasks in
+            self?.panelState.assistantNeedsAttention = tasks.contains { $0.status.group == .attention } || assistantModel?.coordinator.deliveredReminders.isEmpty == false
+        }.store(in: &cancellables)
         fileShelfDrag?.panelFrame = { [weak self] in self?.panel.frame ?? .zero }
         fileShelfDrag?.onActivity = { [weak self] active in
             self?.focusEventGeneration &+= 1
@@ -816,9 +825,15 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         toggle(); try await settle()
         checks.append(("review_toggle_hides", !panel.isVisible))
         show(); try await settle()
+        // An accessory app's ordinary test window needs activation before it can
+        // receive focus. Assert that precondition instead of treating no focus
+        // transfer as a panel dismissal failure.
+        NSApp.activate(ignoringOtherApps: true); try await settle()
+        panel.makeKey(); try await settle()
         let other = NSWindow(contentRect: .init(x: 100, y: 100, width: 100, height: 80), styleMask: [.titled], backing: .buffered, defer: false)
         other.isReleasedWhenClosed = false
         other.makeKeyAndOrderFront(nil); try await settle()
+        checks.append(("review_other_window_received_focus", other.isKeyWindow))
         checks.append(("review_external_focus_hides", !panel.isVisible))
         other.close()
         show(); try await settle()
@@ -1285,6 +1300,9 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
             scroll.contentView.scroll(to: NSPoint(x: 0, y: value)); scroll.reflectScrolledClipView(scroll.contentView)
         }
         return scroll.contentView.bounds.minY
+    }
+    func debugShowAssistantRoute(_ route: AssistantRoute) {
+        _ = showChat(); panelState.assistantRoute = route
     }
     func debugCapturePromptPanel(to url: URL) throws {
         guard let view = panel.contentView, let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { throw SettingsError.responseInvalid }
@@ -2195,6 +2213,13 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
                 settingsModel: settingsModel,
                 promptModel: promptModel,
                 chatModel: chatModel,
+                assistantModel: assistantModel,
+                onHandInspiration: { [weak self] item in
+                    guard let self, self.showChat() else { return }
+                    self.panelState.assistantRoute = .conversation
+                    self.chatModel?.addAttachments([.init(kind: .inspiration, reference: String(item.id), title: item.title)])
+                    self.chatModel?.focus()
+                },
                 fileShelfModel: fileShelfModel,
                 fileShelfDrag: fileShelfDrag,
                 onChatCopy: { [weak self] in self?.onChatCopy($0) ?? false }
@@ -2281,9 +2306,23 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         return true
     }
 
+    @discardableResult
+    func openAssistantTasks() -> Bool {
+        guard showChat() else { return false }
+        panelState.assistantRoute = .tasks
+        return true
+    }
+    @discardableResult
+    func openAssistantTask(_ id: String) -> Bool {
+        guard showChat() else { return false }
+        panelState.openAssistantTask(id: id)
+        return true
+    }
     func showChat() -> Bool {
         requestSelectTab(.chat)
-        return panelState.selectedTab == .chat && !panelState.isSettingsOpen
+        let selected = panelState.selectedTab == .chat && !panelState.isSettingsOpen
+        if selected { panelState.assistantRoute = .conversation }
+        return selected
     }
 
     private func requestSelectTab(_ tab: PanelTab) {
@@ -2582,7 +2621,16 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
         return cubic((low + high) / 2, curve.1, curve.3)
     }
 
+    func openAssistantSettings() {
+        guard settingsModel?.allowLeavingPrompt() != false, settingsModel?.maintaining != true else { return }
+        openSettings()
+        if panelState.isSettingsOpen { panelState.settingsSection = "assistant" }
+    }
+
     func openSettings() {
+#if DEBUG
+        if let onDebugSettingsRequest { onDebugSettingsRequest(); return }
+#endif
         guard !fileDragActive, fileShelfModel?.busy != true, fileShelfModel?.confirmingClear != true else { return }
         panelState.fileShelfPreview = false
         guard chatModel?.canLeaveChat() != false else { return }
@@ -2607,6 +2655,9 @@ final class PanelController: NSObject, PanelPresenting, NSWindowDelegate {
     }
 
     private func toggleSettings() {
+#if DEBUG
+        if let onDebugSettingsRequest { onDebugSettingsRequest(); return }
+#endif
         if panelState.isSettingsOpen { closeSettings() } else { openSettings() }
     }
 

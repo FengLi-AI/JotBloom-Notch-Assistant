@@ -7,6 +7,7 @@ import JotBloomCore
 final class NotchDropView: NSView {
     weak var capture: NotchCaptureController?
     weak var fileShelf: FileShelfDragController?
+    weak var assistantDrop: AssistantDropCoordinator?
     var onActivate: (() -> Void)?
     private var sequence: Int?
     private var cachedText: String?
@@ -38,24 +39,38 @@ final class NotchDropView: NSView {
             capture?.leave()
             guard sender.draggingSourceOperationMask.contains(.copy),
                   fileShelf?.enter(sender, notchFrame: window?.frame ?? .zero) == true else { return [] }
+            assistantDrop?.enterNotch(sender, origin: self)
             return .copy
         }
         guard accepts(sender) else { capture?.leave(); return [] }
-        capture?.hover(); return .copy
+        capture?.hover(); assistantDrop?.enterNotch(sender, origin: self); return .copy
     }
-    override func draggingExited(_ sender: NSDraggingInfo?) { fileShelf?.leaveNotch(); capture?.leave(); sequence = nil; cachedText = nil }
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        if assistantDrop?.active == true { assistantDrop?.leave() }
+        else { fileShelf?.leaveNotch(); capture?.leave() }
+        sequence = nil; cachedText = nil
+    }
     override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
         sender.draggingPasteboard.types?.contains(.fileURL) == true ? fileShelf?.canReceive == true : accepts(sender)
     }
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        if let destination = assistantDrop?.session.destination(for: sender.draggingSequenceNumber) { return destination == .notch }
+        let accepted: Bool
         if sender.draggingPasteboard.types?.contains(.fileURL) == true {
-            return fileShelf?.accept(sender, before: nil, fromNotch: true) == true
+            accepted = fileShelf?.accept(sender, before: nil, fromNotch: true) == true
+        } else {
+            guard accepts(sender), let text = cachedText else { return false }
+            accepted = capture?.accept(text, sequence: sender.draggingSequenceNumber) == true
         }
-        guard accepts(sender), let text = cachedText else { return false }
-        return capture?.accept(text, sequence: sender.draggingSequenceNumber) == true
+        if accepted { assistantDrop?.notchCommitted(sender.draggingSequenceNumber) }
+        return accepted
     }
     override func concludeDragOperation(_ sender: NSDraggingInfo?) { capture?.leave(); sequence = nil; cachedText = nil }
-    override func draggingEnded(_ sender: NSDraggingInfo) { fileShelf?.cancel(); capture?.leave(); sequence = nil; cachedText = nil }
+    override func draggingEnded(_ sender: NSDraggingInfo) {
+        if assistantDrop?.active == true { assistantDrop?.end(sequence: sender.draggingSequenceNumber) }
+        else { fileShelf?.cancel(); capture?.leave() }
+        sequence = nil; cachedText = nil
+    }
 }
 
 @MainActor

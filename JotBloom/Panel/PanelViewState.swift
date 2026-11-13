@@ -24,6 +24,11 @@ final class PanelViewState: ObservableObject {
     private let preferencesStore: PanelPreferencesStore
     @Published var preferences: PanelPreferences { didSet { preferencesStore.save(preferences) } }
     @Published private(set) var isSettingsOpen = false
+    @Published var assistantRoute: AssistantRoute = .conversation
+    @Published var assistantNeedsAttention = false
+    func openAssistantTask(id: String, fromList: Bool = false) {
+        select(.chat); assistantRoute = .detail(id, fromList: fromList)
+    }
     @Published var fileShelfPreview = false
     @Published var isPromptEditorOpen = false
     @Published var settingsSection = "general"
@@ -40,10 +45,12 @@ final class PanelViewState: ObservableObject {
 
     init() {
         var defaults = UserDefaults.standard
-#if DEBUG
+#if DEBUG && JOTBLOOM_LOCAL_DEVELOPMENT
         let environment = ProcessInfo.processInfo.environment
-        if environment.keys.contains(where: { $0.hasPrefix("JOTBLOOM_STAGE") && $0.hasSuffix("_SMOKE") })
-            || environment["JOTBLOOM_DEBUG_DATA_DIRECTORY"] != nil {
+        if AssistantDevelopmentLauncher.enabled {
+            defaults = UserDefaults(suiteName: AssistantDevelopmentLauncher.suite)!
+        } else if environment.keys.contains(where: { $0.hasPrefix("JOTBLOOM_STAGE") && $0.hasSuffix("_SMOKE") })
+            || environment["JOTBLOOM_DEBUG_DATA_DIRECTORY"] != nil || environment["JOTBLOOM_ASSISTANT_PREVIEW"] == "1" {
             // Debug harnesses must not inherit or change the user's preferred default tab.
             let suite = "JotBloom.Debug.\(UUID().uuidString)"
             defaults = UserDefaults(suiteName: suite)!
@@ -52,7 +59,7 @@ final class PanelViewState: ObservableObject {
 #endif
         preferencesStore = PanelPreferencesStore(defaults: defaults)
         preferences = preferencesStore.load()
-#if DEBUG
+#if DEBUG && JOTBLOOM_LOCAL_DEVELOPMENT
         if isolatedPreferencesSuite != nil,
            ProcessInfo.processInfo.environment["JOTBLOOM_REVIEW_APPEARANCE"] == "light" {
             preferences.appearance = .light

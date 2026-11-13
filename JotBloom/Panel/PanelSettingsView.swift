@@ -8,6 +8,7 @@ struct PanelSettingsView: View {
     let dataDirectory: URL?
     let onBack: () -> Void
     var model: SettingsViewModel? = nil
+    var assistantModel: AssistantViewModel? = nil
     @Environment(\.bloomReduceMotion) private var reduceMotion
     @State private var appearanceAnchor: NSView?
     private var sections: [(String, String, String)] {
@@ -16,6 +17,7 @@ struct PanelSettingsView: View {
                             ("clipboard", "剪贴板", "doc.on.clipboard"),
                             ("storage", "存储与隐私", "externaldrive"),
                             ("ai", "AI 接口", "sparkles"),
+                            ("assistant", "助手", "checklist"),
                             ("systemPrompt", "系统提示词", "text.bubble"),
                             ("about", "关于", "info.circle")]
         if let module = extensions.module {
@@ -119,8 +121,10 @@ struct PanelSettingsView: View {
         case "about":
             AboutSettingsView()
         case "systemPrompt":
-            heading("系统提示词", "调整 AI 对话方式。保存后仅新会话生效，已有会话保持原设置。")
+            heading("系统提示词", "调整 助手方式。保存后仅新会话生效，已有会话保持原设置。")
             if let model { SystemPromptEditor(model: model) }
+        case "assistant":
+            if let assistantModel { AssistantAgentSettingsView(coordinator: assistantModel.coordinator, settings: assistantModel.coordinator.agentSettings, onSystemInteraction: assistantModel.onSystemInteraction) }
         case "ai":
             heading("AI 接口", "测试仅发送固定短句；新提示词可发送前 2000 字生成标题；主动对话会发送消息及必要上下文到主模型。")
             if let model { SettingsControls(model: model, section: "ai") } else {

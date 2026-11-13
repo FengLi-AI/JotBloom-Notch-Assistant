@@ -14,6 +14,20 @@ final class ReleaseCheckerTests: XCTestCase {
         XCTAssertLessThan(ReleaseVersion("1.9.9")!, ReleaseVersion("2.0.0")!)
         XCTAssertEqual(ReleaseVersion("v1.0.2"), ReleaseVersion("1.0.2"))
     }
+    func testMac109Detects110WithPreviewTitleButNotPrereleaseFlag() throws {
+        let body: [[String: Any]] = [
+            ["name": "萌生 Mac 1.1.0 预览版", "tag_name": "v1.1.0", "draft": false, "prerelease": false,
+             "assets": [["name": "JotBloom-1.1.0-universal.dmg", "state": "uploaded", "size": 100]]],
+            ["tag_name": "v1.0.9", "draft": false, "prerelease": false,
+             "assets": [["name": "JotBloom-1.0.9-universal.dmg", "state": "uploaded", "size": 100]]]
+        ]
+        let release = try XCTUnwrap(ReleaseChecker.latest(in: JSONSerialization.data(withJSONObject: body), statusCode: 200))
+        XCTAssertEqual(release.version.description, "1.1.0")
+        XCTAssertGreaterThan(release.version, try XCTUnwrap(ReleaseVersion("1.0.9")))
+        XCTAssertEqual(release.pageURL.lastPathComponent, "v1.1.0")
+        var flagged = body; flagged[0]["prerelease"] = true
+        XCTAssertEqual(try ReleaseChecker.latest(in: JSONSerialization.data(withJSONObject: flagged), statusCode: 200)?.version.description, "1.0.9")
+    }
     func testRejectMalformedAndPreviewVersions() {
         for value in ["", "1.2", "1.2.3.4", "1.02.3", "1.-1.0", "1.0.0-preview.3", "1.0.２", " 1.0.2"] {
             XCTAssertNil(ReleaseVersion(value), value)

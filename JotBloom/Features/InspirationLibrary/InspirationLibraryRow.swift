@@ -8,6 +8,7 @@ struct InspirationLibraryRow: View {
     let onSelect: () -> Void
     let onOpen: () -> Void
     let onDelete: () -> Void
+    var onHandToAssistant: (() -> Void)? = nil
     var drag: BloomLibraryDrag? = nil
     var onMove: ((Int64, Int64, Bool) -> Void)? = nil
 
@@ -55,6 +56,7 @@ struct InspirationLibraryRow: View {
 
             BloomRowMenu(title: "灵感的更多操作") {
                 Button("打开灵感") { onSelect(); onOpen() }
+                if let onHandToAssistant { Button("交给助手", action: onHandToAssistant) }
                 Divider()
                 Button("删除灵感", role: .destructive, action: onDelete)
             }

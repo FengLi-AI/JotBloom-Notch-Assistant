@@ -43,21 +43,21 @@ public struct InspirationAIService: Sendable {
 
 struct AIJSONTask: Sendable {
     let transport: any ConnectionTransport
-    func run(instructions: String, content: String, configuration: ModelConfiguration, key: String) async throws -> String {
+    func run(instructions: String, content: String, configuration: ModelConfiguration, key: String, timeout: TimeInterval = 10, attempts: Int = 2, maximumOutputTokens: Int = 256, temperature: Double = 0) async throws -> String {
         let base = try ModelEndpoint.normalize(configuration.baseURL)
         guard !configuration.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw SettingsError.missingModel }
         guard !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !key.contains("\n"), !key.contains("\r") else { throw SettingsError.missingKey }
-        var body: [String: Any] = ["model": configuration.model, "temperature": 0, "stream": false,
+        var body: [String: Any] = ["model": configuration.model, "temperature": temperature, "stream": false,
                                   "messages": [["role": "system", "content": ChatContext.productRules + "\n" + instructions],
                                                ["role": "user", "content": content]]]
         ShortModelTask.applyOptions(to: &body, baseURL: base, model: configuration.model)
-        body["max_tokens"] = 256
+        body["max_tokens"] = maximumOutputTokens
         var request = URLRequest(url: URL(string: base + "/chat/completions")!)
-        request.httpMethod = "POST"; request.timeoutInterval = 10
+        request.httpMethod = "POST"; request.timeoutInterval = timeout
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer " + key, forHTTPHeaderField: "Authorization")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        for attempt in 0..<2 {
+        for attempt in 0..<max(1, attempts) {
             do {
                 let (data, status) = try await transport.send(request)
                 try Task.checkCancellation()
@@ -73,7 +73,7 @@ struct AIJSONTask: Sendable {
                 let retryable: Bool
                 if let e = error as? SettingsError, case .http(let status) = e { retryable = status >= 500 }
                 else { retryable = error is URLError || (error as? SettingsError) == .network || (error as? SettingsError) == .timeout }
-                if attempt == 0 && retryable { continue }
+                if attempt + 1 < attempts && retryable { continue }
                 throw error
             }
         }

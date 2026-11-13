@@ -103,7 +103,7 @@ public extension JotBloomStore {
     }
     func migrationRecordCounts() throws -> [Int64] {
         try performSync { connection in
-            try ["inspirations", "clipboard_items", "drafts", "prompts", "chat_sessions", "chat_messages", "file_shelf"].map { table in
+            try ["inspirations", "clipboard_items", "drafts", "prompts", "chat_sessions", "chat_messages", "file_shelf", "assistant_tasks", "assistant_task_events", "assistant_task_steps", "assistant_questions", "assistant_reminders", "assistant_materials", "assistant_task_links", "assistant_composer_attachments", "assistant_task_runtime", "assistant_agent_sessions", "assistant_owned_threads"].map { table in
                 let statement = try connection.prepare("SELECT COUNT(*) FROM \(table)", operation: "migration_count")
                 guard try statement.stepRow() else { throw SettingsError.migrationFailed }
                 return statement.int64(at: 0)

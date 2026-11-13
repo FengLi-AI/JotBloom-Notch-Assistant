@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var fileShelfViewModel: FileShelfViewModel?
     private var promptViewModel: PromptLibraryViewModel?
     private var chatViewModel: ChatViewModel?
+    private var assistantAssembly: AssistantAssembly?
     private var promptTitles: PromptTitleCoordinator?
     private var pasteboardMonitor: PasteboardMonitor?
     private var pasteboardClient: SystemPasteboardClient?
@@ -33,8 +34,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let capturePermission = CapturePermission()
     private var settingsSuite: String?
     private lazy var settingsDefaults: UserDefaults = {
-#if DEBUG
+#if DEBUG && JOTBLOOM_LOCAL_DEVELOPMENT
         let env = ProcessInfo.processInfo.environment
+        if AssistantDevelopmentLauncher.enabled {
+            let defaults = UserDefaults(suiteName: AssistantDevelopmentLauncher.suite)!
+            settingsSuite = AssistantDevelopmentLauncher.suite
+            if defaults.dictionary(forKey: "jotbloom.settings.v1") == nil {
+                let productionDefaults = Bundle.main.bundleIdentifier == "com.jotbloom.mengsheng" ? UserDefaults.standard : UserDefaults(suiteName: "com.jotbloom.mengsheng")!
+                let existing = AppSettingsStore(defaults: productionDefaults).load()
+                var value = AppSettings(); value.main = existing.main; value.auxiliary = existing.auxiliary
+                value.auxiliaryUsesMain = existing.auxiliaryUsesMain
+                value.monitoringEnabled = false; value.onboardingSeen = true
+                AppSettingsStore(defaults: defaults).save(value)
+            }
+            return defaults
+        }
         if env.keys.contains(where: { $0.hasPrefix("JOTBLOOM_STAGE") && $0.hasSuffix("_SMOKE") }) || env["JOTBLOOM_DEBUG_DATA_DIRECTORY"] != nil {
             let suite = "JotBloom.Settings.Debug." + UUID().uuidString
             settingsSuite = suite
@@ -46,7 +60,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsAreIsolated: Bool { _ = settingsDefaults; return settingsSuite != nil }
     private var locationStore: DataLocationStore {
         get throws {
-#if DEBUG
+#if DEBUG && JOTBLOOM_LOCAL_DEVELOPMENT
+            if AssistantDevelopmentLauncher.enabled { return DataLocationStore(controlDirectory: AssistantDevelopmentLauncher.directory) }
             if let path = ProcessInfo.processInfo.environment["JOTBLOOM_DEBUG_DATA_DIRECTORY"], !path.isEmpty {
                 return DataLocationStore(controlDirectory: try DataDirectoryResolver.validatedDebugDirectory(path: path))
             }
@@ -55,15 +70,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-#if DEBUG
+#if DEBUG && JOTBLOOM_LOCAL_DEVELOPMENT
     private var ephemeralDataDirectory: URL?
+    private var islandPreview: IslandPreview?
+    private var assistantPreview: AssistantPreview?
+    private var developmentLauncher: AssistantDevelopmentLauncher?
+    private var developmentVerification: Task<Void, Never>?
     private var stageThreeSmokeRunner: StageThreeSmokeRunner?
     private var stageFourSmokeRunner: StageFourSmokeRunner?
     private var stageFiveSmokeRunner: StageFiveSmokeRunner?
 #endif
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-#if DEBUG
+#if DEBUG && JOTBLOOM_LOCAL_DEVELOPMENT
+        if ProcessInfo.processInfo.environment["JOTBLOOM_ASSISTANT_M4_LAYOUT"] == "1" {
+            NSApp.setActivationPolicy(.accessory)
+            Task { await AssistantM4Smoke.layout() }; return
+        }
+        if ProcessInfo.processInfo.environment["JOTBLOOM_ASSISTANT_M3_LAYOUT"] == "1" {
+            NSApp.setActivationPolicy(.accessory)
+            Task { await AssistantM3Smoke.layout() }; return
+        }
+        if ProcessInfo.processInfo.environment["JOTBLOOM_ASSISTANT_M3_LIVE"] == "1" {
+            NSApp.setActivationPolicy(.regular)
+            Task { await AssistantM3Smoke.run() }; return
+        }
+        if ProcessInfo.processInfo.environment["JOTBLOOM_ASSISTANT_PREVIEW"] == "1" {
+            NSApp.setActivationPolicy(.accessory)
+            assistantPreview = AssistantPreview.startIfRequested()
+            return
+        }
+        if let preview = IslandPreview.startIfRequested() {
+            NSApp.setActivationPolicy(.accessory)
+            islandPreview = preview
+            return
+        }
         if ProcessInfo.processInfo.environment["JOTBLOOM_STAGE10B_SMOKE"] == "1" {
             NSApp.setActivationPolicy(.accessory)
             Task { @MainActor in await StageTenOperationsSmokeRunner.run() }
@@ -99,6 +140,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 #endif
         NSApp.setActivationPolicy(.accessory)
+#if DEBUG && JOTBLOOM_LOCAL_DEVELOPMENT
+        if AssistantDevelopmentLauncher.enabled { NSApp.setActivationPolicy(.regular) }
+#endif
 
         let appSettings = AppSettingsStore(defaults: settingsDefaults).load()
         do {
@@ -114,7 +158,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let dataDirectory: URL
         let store: JotBloomStore
         let storageStartedAt = ProcessInfo.processInfo.systemUptime
-#if DEBUG
+#if DEBUG && JOTBLOOM_LOCAL_DEVELOPMENT
         var stageTwoSmokeResult: StageTwoPersistenceSmokeResult?
         var stageThreeSmokeBootstrap: StageThreeSmokeBootstrap?
         var stageFourSmokeBootstrap: StageFourSmokeBootstrap?
@@ -122,12 +166,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 #endif
 
         do {
-#if DEBUG
+#if DEBUG && JOTBLOOM_LOCAL_DEVELOPMENT
             dataDirectory = try resolveDataDirectory()
 #else
             dataDirectory = try locationStore.activeDirectory()
 #endif
-#if DEBUG
+#if DEBUG && JOTBLOOM_LOCAL_DEVELOPMENT
             if isStageThreeSmoke {
                 stageThreeSmokeBootstrap = try prepareStageThreeSmokeBootstrap(
                     dataDirectory: dataDirectory
@@ -189,7 +233,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-#if DEBUG
+#if DEBUG && JOTBLOOM_LOCAL_DEVELOPMENT
         let isolatedSmokePasteboard = (
             isStageThreeSmoke || isStageFourSmoke || isStageFiveSmoke ||
                 (settingsAreIsolated && ProcessInfo.processInfo.environment["JOTBLOOM_MANUAL_SYSTEM_CLIPBOARD"] != "1")
@@ -215,7 +259,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 #else
         let pasteboardClient = SystemPasteboardClient()
 #endif
-#if DEBUG
+#if DEBUG && JOTBLOOM_LOCAL_DEVELOPMENT
         let clipboardRetentionPolicy = isStageThreeSmoke
             ? ClipboardRetentionPolicy(
                 maximumCount: 2,
@@ -236,7 +280,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             service: clipboardService,
             pasteboardWriter: pasteboardClient
         )
-#if DEBUG
+#if DEBUG && JOTBLOOM_LOCAL_DEVELOPMENT
         if settingsAreIsolated, ProcessInfo.processInfo.environment["JOTBLOOM_SURFACE_PREVIEW"] == "1" {
                 for (index, text) in ["记录想法，然后继续手头的事。", "从顶部中央展开，柔和地回到原位。", "快速开合也沿着当前状态接续。", "文字保持原尺寸，最终布局保持一致。", "这是一份隔离的演示数据。", "按 ⌃⌥⌘M 再次开合；Esc 收起。"].enumerated() {
                     _ = try? store.upsertClipboardTextSynchronously(text: text, contentType: .text,
@@ -255,7 +299,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             viewModel: clipboardViewModel
         )
 
-        let credentialStorage: any CredentialStoring = settingsAreIsolated ? MemoryCredentialStore() : KeychainCredentialStore()
+        let credentialStorage: any CredentialStoring
+#if DEBUG && JOTBLOOM_LOCAL_DEVELOPMENT
+        if AssistantDevelopmentLauncher.enabled { credentialStorage = AssistantDevelopmentCredentials() }
+        else { credentialStorage = settingsAreIsolated ? MemoryCredentialStore() : KeychainCredentialStore() }
+#else
+        credentialStorage = KeychainCredentialStore()
+#endif
         let credentials: any CredentialStoring = CoordinatedCredentialStore(base: credentialStorage)
         let settingsModel = SettingsViewModel(
             persistence: AppSettingsStore(defaults: settingsDefaults),
@@ -268,8 +318,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             settingsModel?.value.main ?? ModelConfiguration()
         }, defaultSystemPrompt: { [weak settingsModel] in settingsModel?.value.chatSystemPrompt ?? ChatContext.system })
         self.chatViewModel = chatModel
+        let assistant = AssistantAssembly(store: store, chat: chatModel, defaults: settingsDefaults)
+        assistant.configureLanguage(credentials: credentials, settings: { [weak settingsModel] in settingsModel?.value ?? AppSettings() })
+        self.assistantAssembly = assistant
         Task { await chatModel.start() }
         settingsModel.onMainAIConfigurationChanged = { [weak chatModel] in chatModel?.configurationChanged() }
+        settingsModel.onMainAIConfigurationReady = { [weak assistant] in assistant?.coordinator.configurationChanged() }
         let titles = PromptTitleCoordinator(store: store, credentials: credentials, settings: { [weak settingsModel] in settingsModel?.value ?? AppSettings() })
         titles.additionalJob = { [weak store, weak settingsModel, weak inspirationViewModel, weak inspirationLibraryViewModel, weak globalSearchViewModel, weak promptModel] id in
             guard let store, let settingsModel, settingsModel.value.inspirationAIEnabled else { return }
@@ -366,6 +420,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             settingsModel: settingsModel,
             promptModel: promptModel,
             chatModel: chatModel,
+            assistantModel: assistant.viewModel,
             fileShelfModel: fileShelfModel,
             fileShelfDrag: fileShelfDrag
         )
@@ -396,11 +451,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         promptModel.onRequestCollapse = { [weak coordinator] in coordinator?.hide() }
         promptModel.onPasteboardWritten = { [weak pasteboardMonitor] count in pasteboardMonitor?.advanceBaseline(to: count) }
-        #if DEBUG
+        #if DEBUG && JOTBLOOM_LOCAL_DEVELOPMENT
         let restoreFocusAfterSearchCopy = !isStageFiveSmoke
         #endif
         globalSearchViewModel.onRequestCollapse = { [weak coordinator] in
-#if DEBUG
+#if DEBUG && JOTBLOOM_LOCAL_DEVELOPMENT
             coordinator?.hide(restoreFocus: restoreFocusAfterSearchCopy)
 #else
             coordinator?.hide()
@@ -431,11 +486,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             coordinator?.toggle()
         }
         hotZoneController.fileShelf = fileShelfDrag
+        hotZoneController.assistantDrop = assistant.drop
+        fileShelfDrag.additionalDropFrame = { [weak assistant] in assistant?.drop.destinationFrame ?? .zero }
+        assistant.drop.onFinish = { [weak hotZoneController] in hotZoneController?.refresh() }
+        assistant.drop.reducesMotion = { [weak panelController] in panelController?.reducesShelfMotion ?? true }
+        assistant.island.appReducesMotion = { [weak panelController] in panelController?.reducesShelfMotion ?? true }
+        assistant.panelVisible = { [weak coordinator] in coordinator?.isVisible == true }
+        assistant.canInteract = { [weak self, weak settingsModel] in
+            self?.terminationRetryScheduled != true && settingsModel?.blocksPanelInteraction != true
+        }
+        assistant.openTasks = { [weak coordinator, weak panelController] in
+            coordinator?.show(); return panelController?.openAssistantTasks() == true
+        }
+        assistant.openTask = { [weak coordinator, weak panelController] id in
+            coordinator?.show(); return panelController?.openAssistantTask(id) == true
+        }
+        assistant.openSettings = { [weak coordinator, weak chatModel] in
+            coordinator?.show(); chatModel?.onOpenSettings?(); return true
+        }
         fileShelfDrag.onHotZoneRefresh = { [weak hotZoneController] in hotZoneController?.refresh() }
         fileShelfDrag.reducesMotion = { [weak panelController] in panelController?.reducesShelfMotion ?? true }
         fileShelfDrag.onExternalHandoff = { [weak coordinator] in coordinator?.hide(restoreFocus: false) }
-        coordinator.onVisibilityChanged = { [weak hotZoneController, weak pasteboardMonitor] isVisible in
+        assistant.viewModel.onExternalHandoff = { [weak coordinator] in coordinator?.hide(restoreFocus: false) }
+        coordinator.onVisibilityChanged = { [weak hotZoneController, weak pasteboardMonitor, weak assistant] isVisible in
             hotZoneController?.setPanelVisible(isVisible)
+            assistant?.refreshPresentation()
             pasteboardMonitor?.setPanelVisible(isVisible)
             ApplicationExtensionHost.shared.panelVisibilityDidChange(isVisible)
         }
@@ -449,13 +524,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             coordinator?.toggle()
         }
         var registeredShortcut = appSettings.shortcut
-#if DEBUG
-        if isStageOneSmoke || isStageTwoSmoke || isStageThreeSmoke || isStageFourSmoke || isStageFiveSmoke || (settingsAreIsolated && ProcessInfo.processInfo.environment["JOTBLOOM_UI_REVIEW"] != "1") {
+#if DEBUG && JOTBLOOM_LOCAL_DEVELOPMENT
+        if isStageOneSmoke || isStageTwoSmoke || isStageThreeSmoke || isStageFourSmoke || isStageFiveSmoke || (settingsAreIsolated && !AssistantDevelopmentLauncher.enabled && ProcessInfo.processInfo.environment["JOTBLOOM_UI_REVIEW"] != "1") {
             // Do not take the user's everyday Option-Space during legacy lifecycle probes.
             registeredShortcut = Shortcut(keyCode: UInt32(kVK_F19), modifiers: UInt32(controlKey | optionKey | shiftKey), label: "⌃⌥⇧F19")
         }
 #endif
-#if DEBUG
+#if DEBUG && JOTBLOOM_LOCAL_DEVELOPMENT
         if settingsAreIsolated, ProcessInfo.processInfo.environment["JOTBLOOM_SURFACE_PREVIEW"] == "1" {
             registeredShortcut = Shortcut(keyCode: UInt32(kVK_ANSI_M), modifiers: UInt32(controlKey | optionKey | cmdKey), label: "⌃⌥⌘M")
         }
@@ -478,6 +553,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             },
             onQuit: { NSApp.terminate(nil) }
         )
+        menuBarController.assistantDrop = assistant.menuDrop
+        assistant.menuDrop.storeText = { [weak externalWriter] text in
+            guard let externalWriter else { throw AssistantError.unavailable }
+            try await externalWriter.save(text)
+        }
+        assistant.menuDrop.canStoreFiles = { [weak fileShelfDrag] in fileShelfDrag?.canReceive == true }
+        assistant.menuDrop.storeFiles = { [weak fileShelfModel] urls in await fileShelfModel?.add(urls) == true }
+        assistant.onPendingChanged = { [weak menuBarController] in menuBarController?.setPending($0) }
+        assistant.refreshPending()
 
         self.store = store
         self.inspirationViewModel = inspirationViewModel
@@ -500,6 +584,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             settingsModel.feedback = "唤起快捷键注册失败，已恢复菜单栏入口。请在通用设置重新录制。"
         }
         menuBarController.setVisible(settingsModel.value.showMenuBarIcon)
+#if DEBUG && JOTBLOOM_LOCAL_DEVELOPMENT
+        if AssistantDevelopmentLauncher.enabled {
+            let launcher = AssistantDevelopmentLauncher(); developmentLauncher = launcher
+            launcher.showAssistant = { [weak coordinator, weak panelController] in coordinator?.show(); _ = panelController?.showChat() }
+            launcher.showTasks = { [weak coordinator, weak panelController] in coordinator?.show(); _ = panelController?.openAssistantTasks() }
+            launcher.showSettings = { [weak coordinator, weak panelController] in coordinator?.show(); panelController?.openSettings() }
+            launcher.showAssistantSettings = { [weak coordinator, weak panelController] in coordinator?.show(); panelController?.openAssistantSettings() }
+            launcher.hideAssistant = { [weak coordinator] in coordinator?.hide() }
+            launcher.changeDisplay = { [weak assistant] floating in
+                assistant?.island.dismiss(); assistant?.island.forcedFloating = floating; assistant?.island.refreshAppearance()
+            }
+            launcher.showIsland = { [weak assistant, weak coordinator] in
+                coordinator?.hide()
+                assistant?.island.receive(.init(priority: .received, tone: .blue, compactText: "M6 助手岛预览", title: "M6 助手岛预览", body: "这是一条界面样例，不创建任务或提醒。", policy: .received))
+            }
+            launcher.runLocalChecks = { [weak self, weak launcher] in
+                guard let self, let launcher, !launcher.testing else { return }
+                launcher.testing = true; launcher.testStatus = "正在检查菜单栏拖入、持久化和安静模式…"
+                self.developmentVerification = Task {
+                    await AssistantM6Smoke.run { [weak launcher] result in launcher?.testing = false; launcher?.testStatus = result }
+                }
+            }
+            menuBarController.onDevelopmentControls = { [weak launcher] in launcher?.show() }
+            settingsModel.restoreMenuPreference(); menuBarController.setVisible(true)
+            launcher.runChecks = { [weak self, weak launcher, weak settingsModel] in
+                guard let self, let launcher, !launcher.testing else { return }
+                launcher.testing = true; launcher.testStatus = "正在检查真实执行、资料授权和结果交付…"
+                self.developmentVerification = Task {
+                    if ProcessInfo.processInfo.environment["JOTBLOOM_ASSISTANT_VERIFY"] == "2" {
+                        await AssistantSupervisionSmoke.run(credentials: credentials, configuration: settingsModel?.value.main,
+                            completion: { [weak launcher] result in launcher?.testing = false; launcher?.testStatus = result })
+                        return
+                    }
+                    await AssistantM5Smoke.run(credentials: credentials, configuration: settingsModel?.value.main,
+                        completion: { [weak launcher] result in
+                            launcher?.testing = false; launcher?.testStatus = result
+                        })
+                }
+            }
+            launcher.show()
+            if ["1", "2"].contains(ProcessInfo.processInfo.environment["JOTBLOOM_ASSISTANT_VERIFY"] ?? "0") { launcher.runChecks() }
+            if ProcessInfo.processInfo.environment["JOTBLOOM_ASSISTANT_VERIFY"] == "3" { launcher.runLocalChecks() }
+        }
+#endif
 
         ApplicationExtensionHost.shared.start(context: ApplicationExtensionContext(
             defaults: settingsDefaults,
@@ -518,7 +646,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             saveInspiration: { text in try await externalWriter.save(text) }
         ))
 
-#if DEBUG
+        assistant.start()
+#if DEBUG && JOTBLOOM_LOCAL_DEVELOPMENT
         if ProcessInfo.processInfo.environment["JOTBLOOM_UI_WALKTHROUGH"] != "1",
            (ProcessInfo.processInfo.environment["JOTBLOOM_SURFACE_PREVIEW"] != "1" || ProcessInfo.processInfo.environment["JOTBLOOM_DYNAMIC_PREVIEW"] == "1") { hotZoneController.start() }
 #else
@@ -526,7 +655,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 #endif
         pasteboardMonitor.setUserEnabled(appSettings.monitoringEnabled)
         pasteboardMonitor.start()
-#if DEBUG
+#if DEBUG && JOTBLOOM_LOCAL_DEVELOPMENT
         if ProcessInfo.processInfo.environment["JOTBLOOM_MANUAL_SYSTEM_CLIPBOARD"] == "1" {
             print("JOTBLOOM_MANUAL_CLIPBOARD system=\(isolatedSmokePasteboard == nil) monitoring=\(appSettings.monitoringEnabled)")
             fflush(stdout)
@@ -544,7 +673,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         logger.info("JotBloom stage-five global search slice started")
 
-#if DEBUG
+#if DEBUG && JOTBLOOM_LOCAL_DEVELOPMENT
         if ProcessInfo.processInfo.environment["JOTBLOOM_UI_REVIEW"] == "1", settingsAreIsolated {
             if ProcessInfo.processInfo.environment["JOTBLOOM_SURFACE_PREVIEW"] == "1" {
                 panelController.debugConfigureSurfacePreview()
@@ -681,6 +810,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if clipboardViewModel?.isClearing == true { return .terminateCancel }
         guard promptViewModel?.flushEdit() != false else { return .terminateCancel }
         if settingsModel?.busy == true || settingsModel?.choosingDirectory == true { settingsModel?.feedback = "请完成或取消当前设置操作后再退出。"; return .terminateCancel }
+        if !terminationRetryScheduled, let count = assistantAssembly?.coordinator.tasks.filter({ [.running, .queued].contains($0.status) }).count, count > 0 {
+            let alert = NSAlert(); alert.messageText = "有 \(count) 件事还在做，退出后会中断"
+            alert.informativeText = "已生成的文件和执行记录会保留，下次打开后可继续。"
+            alert.addButton(withTitle: "取消"); alert.addButton(withTitle: "退出")
+            guard alert.runModal() == .alertSecondButtonReturn else { return .terminateCancel }
+        }
         settingsModel?.leaveSettings()
         guard let inspirationViewModel,
               let inspirationLibraryViewModel else {
@@ -688,6 +823,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if inspirationViewModel.hasPendingSave
+            || assistantAssembly?.hasPendingWrites == true
             || fileShelfViewModel?.busy == true
             || externalInspirationWriter?.hasPendingSave == true
             || !clipboardTerminationPrepared
@@ -706,6 +842,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                           let inspirationLibraryViewModel else {
                         return
                     }
+                    await assistantAssembly?.pauseAndDrain()
+                    defer { if !terminationRetryScheduled { assistantAssembly?.resume() } }
                     guard await chatViewModel?.prepareForMaintenance() != false else {
                         terminationRetryScheduled = false
                         pasteboardMonitor?.start()
@@ -766,6 +904,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+#if DEBUG && JOTBLOOM_LOCAL_DEVELOPMENT
+        developmentVerification?.cancel()
+#endif
+#if DEBUG && JOTBLOOM_LOCAL_DEVELOPMENT
+        assistantPreview?.stop()
+        islandPreview?.stop()
+#endif
+        assistantAssembly?.stop()
         ApplicationExtensionHost.shared.stop()
         pasteboardMonitor?.stop()
         hotKeyManager?.unregister()
@@ -773,9 +919,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panelController?.close()
         menuBarController?.invalidate()
         store?.close()
+#if DEBUG && JOTBLOOM_LOCAL_DEVELOPMENT
+        if let settingsSuite, !AssistantDevelopmentLauncher.enabled { UserDefaults.standard.removePersistentDomain(forName: settingsSuite) }
+#else
         if let settingsSuite { UserDefaults.standard.removePersistentDomain(forName: settingsSuite) }
+#endif
 
-#if DEBUG
+#if DEBUG && JOTBLOOM_LOCAL_DEVELOPMENT
         removeEphemeralDataDirectoryIfNeeded()
 #endif
 
@@ -787,6 +937,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+#if DEBUG && JOTBLOOM_LOCAL_DEVELOPMENT
+        if let developmentLauncher { developmentLauncher.show(); return true }
+        if let assistantPreview { assistantPreview.showControls(); return true }
+        if let islandPreview { islandPreview.showControls(); return true }
+#endif
         guard settingsModel?.blocksPanelInteraction != true else { return true }
         menuBarController?.setVisible(true)
         settingsModel?.restoreMenuPreference()
@@ -843,7 +998,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.onMigrate = { [weak self] parent, progress in
             guard let self, let store, let input = inspirationViewModel, let library = inspirationLibraryViewModel else { throw SettingsError.maintenance }
             capturePermission.setAllowed(false); pasteboardMonitor?.setMaintenancePaused(true)
-            defer { restoreCaptureAfterMaintenance() }
+            await assistantAssembly?.pauseAndDrain()
+            defer { assistantAssembly?.resume(); restoreCaptureAfterMaintenance() }
             await fileShelfViewModel?.waitForPendingOperations()
             await externalInspirationWriter?.drain()
             await clipboardCaptureCoordinator?.stopAndDrain()
@@ -860,6 +1016,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             let target = try await withTaskCancellationHandler(operation: { try await operation.value }, onCancel: { operation.cancel() })
             // Rebuild the single object graph; no old service can write to the old store afterwards.
+            assistantAssembly?.stop()
             hotKeyManager?.unregister(); hotZoneController?.stop(); pasteboardMonitor?.stop()
             panelController?.close(); menuBarController?.invalidate(); store.close()
             clipboardTerminationPrepared = false; inspirationLibraryTerminationPrepared = false; terminationRetryScheduled = false
@@ -876,7 +1033,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pasteboardMonitor?.setMaintenancePaused(false)
     }
 
-#if DEBUG
+#if DEBUG && JOTBLOOM_LOCAL_DEVELOPMENT
     private var isStageOneSmoke: Bool {
         ProcessInfo.processInfo.environment["JOTBLOOM_STAGE1_SMOKE"] == "1"
     }
@@ -1324,6 +1481,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func resolveDataDirectory() throws -> URL {
+        if AssistantDevelopmentLauncher.enabled {
+            let location = try locationStore
+            if try location.record() == nil {
+                try FileManager.default.createDirectory(at: location.controlDirectory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+            }
+            return try location.activeDirectory()
+        }
         if isStageOneSmoke
             || isStageTwoSmoke
             || isStageThreeSmoke
@@ -1476,7 +1640,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-#if DEBUG
+#if DEBUG && JOTBLOOM_LOCAL_DEVELOPMENT
 private struct StageTwoPersistenceSmokeResult {
     let store: JotBloomStore
     let schemaVersion: Int32

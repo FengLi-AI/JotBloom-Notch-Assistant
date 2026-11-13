@@ -5,7 +5,7 @@ struct SystemPromptEditor: View {
     @ObservedObject var model: SettingsViewModel
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("AI 对话的工作方式").font(BloomTypography.font(14, role: .label))
+            Text("助手的工作方式").font(BloomTypography.font(14, role: .label))
             TextEditor(text: $model.systemPromptDraft)
                 .font(BloomTypography.font(14)).scrollContentBackground(.hidden)
                 .padding(12).frame(height: 260)

@@ -7,6 +7,7 @@ struct InspirationDetailView: View {
     @ObservedObject var viewModel: InspirationLibraryViewModel
     let onBack: () -> Void
     let backDestinationName: String
+    var onHandToAssistant: ((Inspiration) -> Void)? = nil
 
     private enum Field: Hashable {
         case title
@@ -96,6 +97,10 @@ struct InspirationDetailView: View {
             .lineLimit(1)
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityLabel(statusAccessibilityLabel)
+            if let onHandToAssistant, let item = viewModel.detailInspiration {
+                Button("交给助手") { onHandToAssistant(item) }.buttonStyle(BloomButtonStyle())
+                    .disabled(viewModel.isDetailLoading || viewModel.isSavingText)
+            }
             if viewModel.textSaveFailed {
                 Button("重试保存") { viewModel.commandSave() }
                     .buttonStyle(BloomButtonStyle())

@@ -12,6 +12,7 @@ final class HotZoneWindowController {
     private var panelVisible = false
     private var started = false
     var fileShelf: FileShelfDragController?
+    var assistantDrop: AssistantDropCoordinator?
 
 #if DEBUG
     var debugWindowCount: Int { windows.count }
@@ -79,6 +80,7 @@ final class HotZoneWindowController {
     func setPanelVisible(_ isVisible: Bool) {
         panelVisible = isVisible
         // Keep the original destination window alive until the mouse is released.
+        if isVisible { assistantDrop?.cancel() }
         if fileShelf?.active != true { refresh() }
     }
 
@@ -91,7 +93,7 @@ final class HotZoneWindowController {
     func refresh() {
         guard started else { return }
 
-        if fileShelf?.active == true { return }
+        if fileShelf?.active == true || assistantDrop?.active == true { return }
         let fullScreenState = fullScreenDetector.currentState()
         closeWindows()
         windows = NSScreen.screens.compactMap { screen in
@@ -105,7 +107,7 @@ final class HotZoneWindowController {
                 return nil
             }
 
-            let window = HotZonePanel(frame: hotZoneFrame, fileShelf: fileShelf)
+            let window = HotZonePanel(frame: hotZoneFrame, fileShelf: fileShelf, assistantDrop: assistantDrop)
             window.onActivate = onActivate
             window.orderFrontRegardless()
             return window
@@ -128,7 +130,7 @@ private final class HotZonePanel: NSPanel {
 
     private let clickView = HotZoneClickView(frame: .zero)
 
-    init(frame: CGRect, fileShelf: FileShelfDragController?) {
+    init(frame: CGRect, fileShelf: FileShelfDragController?, assistantDrop: AssistantDropCoordinator?) {
         super.init(
             contentRect: frame,
             styleMask: [.borderless, .nonactivatingPanel],
@@ -149,10 +151,10 @@ private final class HotZonePanel: NSPanel {
         if let customView = ApplicationExtensionHost.shared.module?.makeHotZoneView(onActivate: { [weak self] in self?.onActivate?() }) {
             contentView = customView
         }
-        if let drop = contentView as? NotchDropView { drop.fileShelf = fileShelf }
+        if let drop = contentView as? NotchDropView { drop.fileShelf = fileShelf; drop.assistantDrop = assistantDrop }
         else {
             let drop = NotchDropView(frame: .zero)
-            drop.fileShelf = fileShelf; drop.onActivate = { [weak self] in self?.onActivate?() }
+            drop.fileShelf = fileShelf; drop.assistantDrop = assistantDrop; drop.onActivate = { [weak self] in self?.onActivate?() }
             contentView = drop
         }
     }

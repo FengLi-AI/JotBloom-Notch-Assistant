@@ -10,6 +10,7 @@ private final class ChatScrollReference: ObservableObject { weak var scroll: NSS
 
 struct ChatView: View {
     @ObservedObject var model: ChatViewModel
+    @State private var composerHovered = false
     @State private var viewportHeight: CGFloat = 0
     @State private var restoring = true
     @State private var pendingRestoration: (id: Int64, offset: Double)?
@@ -19,20 +20,38 @@ struct ChatView: View {
     @State private var sessionName = ""
     @StateObject private var scrollReference = ChatScrollReference()
     var onCopy: (String) -> Bool
+    var assistantModel: AssistantViewModel?
+    var assistantTasks: [String: AssistantTask] = [:]
+    var assistantLinks: [String: AssistantTaskLink] = [:]
+    var savingTurns: Set<String> = []
+    var taskEntryTitle = "任务"
+    var taskNeedsAttention = false
+    var showingTasks = false
+    var onTaskList: (() -> Void)?
+    var onConvert: ((ChatTurn) -> Void)?
+    var onOpenTask: ((String) -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("AI 对话").font(BloomTypography.font(17, role: .label))
-                if !model.showingHistory {
+                Text("助手").font(BloomTypography.font(17, role: .label))
+                if !model.showingHistory && onTaskList == nil {
                     Text(model.sessions.first(where: \.isCurrent)?.title ?? "新对话")
                         .font(BloomTypography.font(11)).foregroundStyle(BloomTheme.muted).lineLimit(1)
                 }
                 Spacer()
-                Button(model.showingHistory ? "返回对话" : "历史对话") { model.toggleHistory() }
+                if let onTaskList {
+                    Button(action: onTaskList) {
+                        HStack(spacing: 4) {
+                            if taskNeedsAttention { Circle().fill(IslandTheme.statusOrange).frame(width: 6, height: 6) }
+                            Text(showingTasks ? "返回对话" : taskEntryTitle)
+                        }.frame(minWidth: 100)
+                    }.disabled(!model.canLeaveAssistantConversation)
+                }
+                Button(model.showingHistory ? "返回对话" : "历史对话") { if showingTasks { onTaskList?() }; model.toggleHistory() }
                     .disabled(!model.canManageSessions)
-                Button("新对话") { model.requestNew() }.disabled(!model.canManageSessions)
-                Button { model.summarize() } label: { BloomActionLabel(title: model.summarizing ? "正在整理…" : "整理成灵感", symbol: "sparkles") }.buttonStyle(BloomButtonStyle(ai: true)).disabled(!model.canSummarize)
+                Button("新对话") { if showingTasks { onTaskList?() }; model.requestNew() }.disabled(!model.canManageSessions)
+                Button { if showingTasks { onTaskList?() }; model.summarize() } label: { BloomActionLabel(title: model.summarizing ? "正在整理…" : "整理成灵感", symbol: "sparkles") }.buttonStyle(BloomButtonStyle(ai: true)).disabled(!model.canSummarize)
             }.buttonStyle(BloomButtonStyle()).frame(height: 32)
             if !model.configured {
                 HStack {
@@ -40,7 +59,9 @@ struct ChatView: View {
                     Button("前往 AI 设置") { model.onOpenSettings?() }.buttonStyle(.plain).foregroundStyle(BloomTheme.blue)
                 }
             }
-            if model.summaryPreview {
+            if showingTasks, let assistantModel {
+                TaskListView(model: assistantModel, onOpen: { onOpenTask?($0) })
+            } else if model.summaryPreview {
                 summaryEditor
             } else if model.showingHistory {
                 historyList
@@ -51,8 +72,15 @@ struct ChatView: View {
                         LazyVStack(alignment: .leading, spacing: 14) {
                             if model.hasMore { Button(model.loadingMore ? "正在加载…" : "加载更早消息") { model.loadMore() }.disabled(model.loadingMore) }
                             if model.turns.isEmpty {
-                                Text(model.ready ? "从一个模糊的想法开始。\nAI 帮你发散方向，再一起找到值得往下做的一步。" : "正在读取当前对话…")
-                                    .foregroundStyle(BloomTheme.muted).padding(.vertical, 20)
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Text(model.ready ? "有事交给我，或者随便聊聊" : "正在读取当前对话…")
+                                        .foregroundStyle(BloomTheme.muted)
+                                    if model.ready {
+                                        ForEach(["RAG 和微调有什么区别？", "周五前帮我整理一版竞品方案", "帮我记一下：下周约设计评审"], id: \.self) { example in
+                                            Button(example) { model.draft = example; model.focus() }.buttonStyle(BloomButtonStyle())
+                                        }
+                                    }
+                                }.padding(.vertical, 20)
                                 if !model.ready { Button("重新读取") { Task { await model.start() } } }
                             }
                             ForEach(model.turns) { turn in
@@ -140,12 +168,24 @@ struct ChatView: View {
             if model.summaryOversized {
                 Button("仅整理最近 3 个完成轮次") { model.summarize(recentOnly: true) }.buttonStyle(BloomButtonStyle()).disabled(!model.canSummarize)
             }
-            if !model.showingHistory && !model.summaryPreview {
-            Text("消息及必要上下文会发送到设置的主模型，可能产生费用；未完成轮次不会加入后续上下文。")
+            if !showingTasks && !model.showingHistory && !model.summaryPreview {
+            Text("消息及必要上下文会发送到设置的模型服务，可能产生费用；未完成轮次不会加入后续上下文。")
                 .font(BloomTypography.font(10)).foregroundStyle(BloomTheme.muted).lineLimit(2)
+            ComposerAttachmentRow(attachments: model.attachments, onRemove: model.removeAttachment).disabled(model.busy)
             HStack(alignment: .bottom, spacing: 8) {
-                ChatComposer(text: $model.draft, focusRequest: model.focusRequest, enabled: model.ready && !model.switching && !model.summarizing, onSend: model.send)
+                ChatComposer(text: $model.draft, focusRequest: model.focusRequest, enabled: model.ready && !model.switching && !model.summarizing, onSend: model.send,
+                             onFiles: model.busy ? nil : { model.addAttachments($0.map(AssistantAttachment.file)) },
+                             onHover: { composerHovered = $0 })
+                    .overlay(alignment: .topLeading) {
+                        if composerHovered || model.draft.isEmpty {
+                            Text(composerHovered ? "松手放进输入框" : model.attachments.isEmpty ? "有事交给我，或者随便聊聊…" : "补一句要求，也可以直接发送")
+                                .font(BloomTypography.font(13)).foregroundStyle(BloomTheme.muted)
+                                .padding(.horizontal, 10).padding(.top, 8)
+                                .background(composerHovered ? BloomTheme.well : .clear).allowsHitTesting(false)
+                        }
+                    }
                     .frame(height: 60).modifier(BloomSurface(color: BloomTheme.well, radius: 14))
+                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(composerHovered ? BloomTheme.blue : .clear, lineWidth: 1.5))
                 if model.busy {
                     Button(model.authorizing ? "取消" : "停止") { model.stop() }.buttonStyle(BloomButtonStyle())
                 } else {
@@ -160,7 +200,7 @@ struct ChatView: View {
         .confirmationDialog("删除这条对话？", isPresented: $model.confirmingDelete) {
             Button("删除对话", role: .destructive) { model.deleteConversation() }
             Button("取消", role: .cancel) {}
-        } message: { Text("“\(model.deletionTarget?.title ?? "此对话")”及其未发送草稿将被删除，不能恢复；其他对话、灵感库和提示词库不受影响。") }
+        } message: { Text("“\(model.deletionTarget?.title ?? "此对话")”及其未发送草稿将被删除，不能恢复；已关联的任务、其他对话、灵感库和提示词库不受影响。") }
     }
 
     private var historyList: some View {
@@ -228,15 +268,30 @@ struct ChatView: View {
                 Text(SavedTime.text(turn.timestamp)).font(BloomTypography.font(10)).foregroundStyle(BloomTheme.muted)
                 Spacer()
             }
+            if assistantLinks[turn.token] == nil || turn.answer != "已转为任务。" {
             Text(turn.answer.isEmpty && turn.status.isActive ? "正在等待回复…" : turn.answer)
                 .font(BloomTypography.font(13)).lineSpacing(3).textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if let link = assistantLinks[turn.token] {
+                if let id = link.taskID, let task = assistantTasks[id] {
+                    if let assistantModel, task.scope == nil && ([.needsInfo, .planReady, .scheduled, .understanding, .interrupted].contains(task.status) || task.errorCode != nil) {
+                        AssistantTaskActionView(model: assistantModel, task: task, onSettings: { model.onOpenSettings?() }).id(task.updatedAt)
+                    }
+                    TaskTurnCardView(task: task, onOpen: { onOpenTask?(id) })
+                } else { Text("这件事已删除").font(BloomTypography.font(12)).foregroundStyle(BloomTheme.muted) }
+            }
             HStack(spacing: 12) {
-                if !turn.answer.isEmpty {
+                if model.savedNote?.turn == turn.token { Button("撤销") { model.undoNote() }.disabled(model.busy) }
+                if !turn.answer.isEmpty && (assistantLinks[turn.token] == nil || turn.answer != "已转为任务。") {
                     Button(copied == turn.id ? "已复制" : "复制回答") {
                         copied = onCopy(turn.answer) ? turn.id : nil
                     }.help("复制完整回答，不收起面板")
+                }
+                if turn.status == .complete, assistantLinks[turn.token] == nil, let onConvert {
+                    Button(savingTurns.contains(turn.token) ? "正在保存…" : "当任务办") { onConvert(turn) }
+                        .disabled(savingTurns.contains(turn.token))
                 }
                 if !turn.status.isActive && turn.status != .complete {
                     Text(statusLabel(turn.status)).foregroundStyle(BloomTheme.muted)

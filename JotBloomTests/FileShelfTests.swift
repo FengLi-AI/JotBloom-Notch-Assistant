@@ -122,15 +122,20 @@ final class FileShelfTests: XCTestCase {
         let root = try TestTemporaryDirectory.make(); defer { TestTemporaryDirectory.remove(root) }
         let dbURL = root.appendingPathComponent(DataDirectoryResolver.databaseFileName)
         let db = try SQLiteConnection(databaseURL: dbURL)
-        try DatabaseMigrator.bootstrap(db)
-        try db.execute("DROP TABLE file_shelf; PRAGMA user_version=7; INSERT INTO drafts(kind,content,updated_at_utc_ms) VALUES('inspiration','existing draft',1)", operation: "test_v7_fixture")
+        try DatabaseMigrator.createVersionTwo(db)
+        try DatabaseMigrator.migrateVersionTwoToThree(db)
+        try DatabaseMigrator.migrateVersionThreeToFour(db)
+        try DatabaseMigrator.migrateVersionFourToFive(db)
+        try DatabaseMigrator.migrateVersionFiveToSix(db)
+        try DatabaseMigrator.migrateVersionSixToSeven(db)
+        try db.execute("INSERT INTO drafts(kind,content,updated_at_utc_ms) VALUES('inspiration','existing draft',1)", operation: "test_v7_fixture")
         db.close()
         let store = try JotBloomStore(dataDirectoryURL: root); defer { store.close() }
         let shelf = try await store.loadFileShelf()
         let draft = try await store.loadDraft(kind: .inspiration)
         XCTAssertTrue(shelf.isEmpty); XCTAssertEqual(draft?.content, "existing draft")
         let check = try SQLiteConnection(databaseURL: dbURL); defer { check.close() }
-        XCTAssertEqual(try check.userVersion(), 8)
+        XCTAssertEqual(try check.userVersion(), DatabaseMigrator.currentVersion)
     }
 
     func testIndependentSettingDefaultsOnAndPersistsWithoutClipboardMonitoring() {

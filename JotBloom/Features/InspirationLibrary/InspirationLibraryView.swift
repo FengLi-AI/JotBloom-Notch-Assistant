@@ -5,6 +5,7 @@ import SwiftUI
 struct InspirationLibraryView: View {
     @ObservedObject var viewModel: InspirationLibraryViewModel
     let onOpen: (Int64) -> Void
+    var onHandToAssistant: ((Inspiration) -> Void)? = nil
 
     @Environment(\.bloomReduceMotion) private var reduceMotion
     @Environment(\.bloomLibraryResize) private var resize
@@ -111,6 +112,7 @@ struct InspirationLibraryView: View {
                                 viewModel.select(inspiration.id)
                                 viewModel.delete(identifier: inspiration.id)
                             },
+                            onHandToAssistant: onHandToAssistant.map { action in { action(inspiration) } },
                             drag: libraryDrag,
                             onMove: { viewModel.move($0, relativeTo: $1, after: $2) },
                             rowHeight: layout.cardHeight,

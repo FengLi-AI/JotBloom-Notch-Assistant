@@ -10,7 +10,8 @@ final class NoRedirectDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sen
 }
 
 public struct URLSessionConnectionTransport: ConnectionTransport {
-    public init() {}
+    private let timeout: TimeInterval?
+    public init(timeout: TimeInterval? = nil) { self.timeout = timeout }
     static func configuration() -> URLSessionConfiguration {
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 10
@@ -21,6 +22,7 @@ public struct URLSessionConnectionTransport: ConnectionTransport {
     }
     public func send(_ request: URLRequest) async throws -> (Data, Int) {
         let config = Self.configuration()
+        if let timeout { config.timeoutIntervalForRequest = timeout; config.timeoutIntervalForResource = timeout }
         let session = URLSession(configuration: config, delegate: NoRedirectDelegate(), delegateQueue: nil)
         defer { session.invalidateAndCancel() }
         let (bytes, response) = try await session.bytes(for: request)

@@ -113,11 +113,11 @@ struct InspirationInputView: View {
                 Button {
                     guard (NSApp.keyWindow?.firstResponder as? NSTextInputClient)?.hasMarkedText() != true else { return }
                     viewModel.discuss()
-                } label: { BloomActionLabel(title: "AI 探讨", symbol: "sparkles") }
+                } label: { BloomActionLabel(title: "交给助手", symbol: "sparkles") }
                     .buttonStyle(BloomButtonStyle(ai: true))
                     .disabled(!viewModel.canSave || viewModel.sendToChat == nil)
                     .help("发送到当前对话：正文及必要上下文会发送给你配置的主模型，可能产生费用")
-                    .accessibilityLabel("AI 探讨，发送到当前对话")
+                    .accessibilityLabel("交给助手，发送到当前对话")
             }
             .frame(height: BloomTheme.buttonHeight)
             .padding(.trailing, 42)

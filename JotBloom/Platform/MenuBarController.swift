@@ -2,6 +2,9 @@ import AppKit
 
 @MainActor
 final class MenuBarController: NSObject {
+    var onDevelopmentControls: (() -> Void)?
+    let dropView = AssistantStatusDropView(frame: .zero)
+    var assistantDrop: AssistantMenuDrop? { didSet { dropView.coordinator = assistantDrop } }
     private let statusItem: NSStatusItem
     private let onToggle: () -> Void
     private let onShow: () -> Void
@@ -29,13 +32,21 @@ final class MenuBarController: NSObject {
         button.target = self
         button.action = #selector(handleStatusItemClick(_:))
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        dropView.button = button; dropView.frame = button.bounds; dropView.autoresizingMask = [.width, .height]
+        button.addSubview(dropView)
     }
 
     func invalidate() {
+        assistantDrop?.cancel()
         NSStatusBar.system.removeStatusItem(statusItem)
     }
 
-    func setVisible(_ visible: Bool) { statusItem.isVisible = visible }
+    func setVisible(_ visible: Bool) { if !visible { assistantDrop?.cancel() }; statusItem.isVisible = visible }
+    func setPending(_ pending: Bool) {
+        dropView.pending = pending
+        statusItem.button?.toolTip = pending ? "萌生 · 有待处理事项" : "萌生 JotBloom · 拖入文字或文件"
+        statusItem.button?.setAccessibilityLabel(pending ? "萌生，有待处理事项" : "萌生")
+    }
 
     @objc
     private func handleStatusItemClick(_ sender: NSStatusBarButton) {
@@ -55,6 +66,10 @@ final class MenuBarController: NSObject {
         let settingsItem = NSMenuItem(title: "设置…", action: #selector(showSettings), keyEquivalent: ",")
         settingsItem.target = self
         menu.addItem(settingsItem)
+        if onDevelopmentControls != nil {
+            let item = NSMenuItem(title: "开发与验收…", action: #selector(showDevelopmentControls), keyEquivalent: "")
+            item.target = self; menu.addItem(item)
+        }
         menu.addItem(.separator())
 
         let quitItem = NSMenuItem(title: "退出萌生", action: #selector(quitApplication), keyEquivalent: "q")
@@ -68,6 +83,8 @@ final class MenuBarController: NSObject {
             in: button
         )
     }
+
+    @objc private func showDevelopmentControls() { onDevelopmentControls?() }
 
     @objc
     private func showPanel() {

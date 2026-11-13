@@ -1,4 +1,5 @@
 import AppKit
+import JotBloomCore
 
 @MainActor
 final class CodexCompletionMonitor {
@@ -44,6 +45,7 @@ final class CodexCompletionMonitor {
                 guard let self, self.generation == token else { return }
                 self.polling = false; self.onStatus(status)
                 for event in events {
+                    guard !AssistantOwnedThreads.ids.contains(event.thread) else { continue }
                     let shouldNotify = self.foreground.shouldNotify(event)
                     self.onDecision(event, shouldNotify)
                     guard shouldNotify else { continue }

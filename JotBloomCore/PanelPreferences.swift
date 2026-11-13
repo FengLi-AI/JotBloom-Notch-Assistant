@@ -15,7 +15,7 @@ public enum PanelSlot: String, Codable, CaseIterable {
         case .clipboard: return "剪贴板"
         case .prompts: return "提示词"
         case .inspirationLibrary: return "灵感库"
-        case .chat: return "对话"
+        case .chat: return "助手"
         case .fileShelf: return "中转站"
         case .globalSearch: return "搜索"
         }
@@ -26,7 +26,7 @@ public enum PanelSlot: String, Codable, CaseIterable {
         case .clipboard: return "doc.on.clipboard"
         case .prompts: return "text.badge.star"
         case .inspirationLibrary: return "square.stack.3d.up"
-        case .chat: return "bubble.left.and.bubble.right"
+        case .chat: return "checklist"
         case .fileShelf: return "folder"
         case .globalSearch: return "magnifyingglass"
         }

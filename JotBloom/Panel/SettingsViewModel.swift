@@ -82,6 +82,7 @@ final class SettingsViewModel: ObservableObject {
     var onSystemInteraction: ((Bool) -> Void)?
     var onDirectorySelection: ((Bool) -> Void)?
     var onAIConfigurationChanged: (() -> Void)?
+    var onMainAIConfigurationReady: (() -> Void)?
     var onMainAIConfigurationChanged: (() -> Void)?
 
     init(persistence: AppSettingsStore, credentials: any CredentialStoring, login: any LoginItemServicing,
@@ -237,7 +238,7 @@ final class SettingsViewModel: ObservableObject {
             auxiliaryURL = value.auxiliary.baseURL; auxiliaryModel = value.auxiliary.model
             if previousMain != value.main || previousAuxiliary != value.auxiliary { onAIConfigurationChanged?() }
             if previousMain != value.main { onMainAIConfigurationChanged?() }
-            persist(); return true
+            persist(); if previousMain != value.main { onMainAIConfigurationReady?() }; return true
         } catch { feedback = error.localizedDescription; return false }
     }
     // This is only session-local display information, never a reason to read Keychain.
@@ -250,7 +251,7 @@ final class SettingsViewModel: ObservableObject {
         run { [self] in
             onAIConfigurationChanged?()
             try await credentials.write(secret, slot: slot)
-            if slot == .main { onMainAIConfigurationChanged?() }
+            if slot == .main { onMainAIConfigurationChanged?(); onMainAIConfigurationReady?() }
             keyMasks[slot] = ModelEndpoint.maskedKey(secret)
             keyInputs[slot] = ""; configurationEdited(); feedback = "密钥已保存到系统钥匙串。"
         }
@@ -323,6 +324,7 @@ final class SettingsViewModel: ObservableObject {
                 connectionStatus[slot] = "连接成功 · \(Int(result.elapsedMilliseconds))ms · \(result.attempts) 次请求"
                     + (result.totalTokens.map { " · \($0) tokens" } ?? " · 服务未提供用量")
                 credentialHelp.remove(slot)
+                if effective.credentialSlot == .main { onMainAIConfigurationReady?() }
             } catch {
                 guard let self, revision == expected, !Task.isCancelled else { return }
                 connectionStatus[slot] = (error as? SettingsError)?.localizedDescription ?? "连接失败，请检查配置。"

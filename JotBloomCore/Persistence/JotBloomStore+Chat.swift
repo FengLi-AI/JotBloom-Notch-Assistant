@@ -119,6 +119,7 @@ extension JotBloomStore {
                 let empty = try db.prepare("""
                     SELECT id FROM chat_sessions WHERE slot=1
                     AND NOT EXISTS(SELECT 1 FROM chat_messages WHERE session_id=chat_sessions.id)
+                    AND NOT EXISTS(SELECT 1 FROM assistant_composer_attachments WHERE chat_session_token=chat_sessions.token AND payload_json!='[]')
                     AND NOT EXISTS(SELECT 1 FROM drafts WHERE kind='ai_chat' AND length(trim(content,char(32)||char(9)||char(10)||char(13)))>0)
                     """, operation: "reuse_empty_chat")
                 if try empty.stepRow() { return }
@@ -143,6 +144,7 @@ extension JotBloomStore {
                 FROM chat_sessions s WHERE EXISTS(SELECT 1 FROM chat_messages WHERE session_id=s.id)
                     OR (s.slot=1 AND EXISTS(SELECT 1 FROM drafts WHERE kind='ai_chat' AND length(trim(content,char(32)||char(9)||char(10)||char(13)))>0))
                     OR (s.slot IS NULL AND length(trim(s.draft,char(32)||char(9)||char(10)||char(13)))>0)
+                    OR EXISTS(SELECT 1 FROM assistant_composer_attachments WHERE chat_session_token=s.token AND payload_json!='[]')
                 ORDER BY s.updated_at_utc_ms DESC,s.id DESC
                 """, operation: "chat_sessions")
             var result: [ChatSession] = []
@@ -164,7 +166,7 @@ extension JotBloomStore {
                 let text = target.text(at: 1)
                 try Self.archiveCurrentDraft(db)
                 // Only discard the blank session being left, never historical records or drafts.
-                try db.execute("DELETE FROM chat_sessions WHERE slot=1 AND length(trim(draft,char(32)||char(9)||char(10)||char(13)))=0 AND NOT EXISTS(SELECT 1 FROM chat_messages WHERE session_id=chat_sessions.id)", operation: "discard_blank_session")
+                try db.execute("DELETE FROM chat_sessions WHERE slot=1 AND length(trim(draft,char(32)||char(9)||char(10)||char(13)))=0 AND NOT EXISTS(SELECT 1 FROM chat_messages WHERE session_id=chat_sessions.id) AND NOT EXISTS(SELECT 1 FROM assistant_composer_attachments WHERE chat_session_token=chat_sessions.token AND payload_json!='[]')", operation: "discard_blank_session")
                 try db.execute("UPDATE chat_sessions SET slot=NULL WHERE slot=1", operation: "leave_chat")
                 let activate = try db.prepare("UPDATE chat_sessions SET slot=1,draft='' WHERE token=?", operation: "activate_chat")
                 try activate.bind(token, at: 1); try activate.executeDone()
