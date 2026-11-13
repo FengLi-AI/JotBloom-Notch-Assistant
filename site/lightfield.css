@@ -144,3 +144,15 @@ main section[id]{scroll-margin-top:110px}
 }
 .shelf-feature .kicker{display:inline-block;padding:7px 13px;border-radius:20px;background:#102a577a;color:#f3f7ff}
 @media(max-width:600px){.shelf-feature .section-title h2{font-size:clamp(30px,10vw,40px)}}
+
+/* Keep the legacy download secondary to the current release. */
+.download-pair{grid-template-columns:1fr;max-width:280px}
+.hero-aside .history-download{font-size:11px;line-height:1.6;margin:10px 0 0;color:#c7d8ef}
+.history-download a{display:inline-flex;align-items:center;min-height:28px;text-underline-offset:4px;transition:color .2s}
+.history-download a:hover{color:#fff;text-decoration:underline}
+.history-download a:focus-visible{outline:2px solid #c7e3ff;outline-offset:5px;border-radius:3px}
+.hero-aside small{margin-top:14px}
+/* All product views are captured from Mac 1.1.0 at their native proportions. */
+.screenshot-button{height:auto;aspect-ratio:760/540}
+.product-tabs button{padding-inline:16px}
+@media(max-width:600px){.hero-aside .history-download{font-size:11px;margin-top:8px}.download-pair{max-width:280px}.product-tabs button{padding:9px 12px}.screenshot-button{height:auto;min-height:0}}

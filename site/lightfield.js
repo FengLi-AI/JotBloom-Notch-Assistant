@@ -11,19 +11,29 @@
   function wake(){if(!toyFrame&&!reduced.matches)toyFrame=requestAnimationFrame(settle);}
   toy.addEventListener('pointermove',e=>{if(e.pointerType==='touch'||reduced.matches)return;const r=toy.getBoundingClientRect();tx=Math.max(-1,Math.min(1,(e.clientX-r.left)/r.width*2-1));ty=Math.max(-1,Math.min(1,(e.clientY-r.top)/r.height*2-1));wake();});toy.addEventListener('pointerleave',()=>{tx=ty=0;wake();});
   reduced.addEventListener('change',()=>{if(reduced.matches){cancelAnimationFrame(toyFrame);toyFrame=0;tilt.style.transform='';tx=ty=x=y=vx=vy=0;}queueLight();});
-  const features={capture:{title:'想法来了，先留住它。',description:'随手记录，在灵感库回看。配置 AI 后，自动生成简短标题并辅助分类。',image:'inspiration',label:'灵感记录'},clipboard:{title:'刚复制过的，还在这里。',description:'回看文字与图片，左键复制收起，右键复制保留。文字可另存为灵感或提示词。',image:'clipboard',label:'剪贴板历史'},prompts:{title:'好用的提示词，值得再用一次。',description:'收藏、编辑、另存，拖动排好顺序。下次需要时，直接复制常用提示词。',image:'prompts',label:'提示词库'},chat:{title:'能聊想法，也能交办。',description:'1.1.0 的助手保留历史对话，也支持计划确认、任务跟进和 Codex 派活。下图为 1.0.7 对话界面，助手新功能见下方介绍。',image:'chat',label:'AI 对话 · 1.0.7 界面'},library:{title:'散落的灵感，慢慢连起来。',description:'按文章、作品、产品与 idea 分类回看，继续编辑，让想法逐渐清晰。',image:'library',label:'灵感库'},search:{title:'记得一点，就能再找到。',description:'一起搜索灵感、剪贴板和提示词，按分类缩小范围，回到需要的内容。',image:'search',label:'统一搜索'}};
+  const features={
+    assistant:{title:'有事交给萌生，先聊清楚。',description:'讨论想法，也能直接交办。确认目标和资料范围后，助手继续推进，你随时可以补充要求。',image:'assistant',label:'助手'},
+    plan:{title:'开始之前，你来确认。',description:'看清目标、完成标准与资料范围，决定是否交给 Codex、是否允许联网。确认后再开始。',image:'plan',label:'计划确认'},
+    tasks:{title:'需要你决定的事，一眼找到。',description:'集中查看任务与提醒，回到详情补充要求、查看结果。萌生轻量跟进，重要的问题再提醒你。',image:'tasks',label:'任务与提醒'},
+    capture:{title:'想法来了，先留住它。',description:'随手记录，在灵感库回看。配置 AI 后，自动生成简短标题并辅助分类。',image:'inspiration',label:'灵感记录'},
+    clipboard:{title:'刚复制过的，还在这里。',description:'回看文字与图片，左键复制收起，右键复制保留。文字可另存为灵感或提示词。',image:'clipboard',label:'剪贴板历史'},
+    prompts:{title:'好用的提示词，值得再用一次。',description:'收藏、编辑、另存，拖动排好顺序。下次需要时，直接复制常用提示词。',image:'prompts',label:'提示词库'},
+    library:{title:'散落的灵感，慢慢连起来。',description:'按文章、作品、产品与 idea 分类回看，继续编辑，也可以把灵感交给助手。',image:'library',label:'灵感库'},
+    search:{title:'记得一点，就能再找到。',description:'一起搜索灵感、剪贴板和提示词，按分类缩小范围，回到需要的内容。',image:'search',label:'统一搜索'}
+  };
   const tabs=[...document.querySelectorAll('[data-feature]')],img=document.querySelector('#feature-image');
-  let previewTheme='dark',selectedFeature='capture',pictureRevision=0;
+  let previewTheme='dark',selectedFeature='assistant',pictureRevision=0;
   try{const saved=localStorage.getItem('jotbloom-preview-theme');if(saved==='light')previewTheme=saved;}catch{}
   const themeButtons=[...document.querySelectorAll('[data-preview-theme]')];
   async function renderPicture(){
     const ticket=++pictureRevision,f=features[selectedFeature],theme=previewTheme;
-    const src=`assets/1.0.7/${theme}-${f.image}.png`,next=new Image();next.src=src;
+    const src=`assets/1.1.0/${theme}-${f.image}.png`,next=new Image();next.src=src;
     themeButtons.forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.previewTheme===theme)));
     try{await next.decode();}catch{if(ticket===pictureRevision)document.querySelector('#feature-label').textContent='截图加载未完成，请重试';return;}
     if(ticket!==pictureRevision)return;
-    img.src=src;img.alt=`萌生 Mac 1.0.7 ${theme==='light'?'浅色':'深色'} · ${f.label}原生界面截图`;
+    img.src=src;img.alt=`萌生 Mac 1.1.0 ${theme==='light'?'浅色':'深色'} · ${f.label}原生界面截图`;
     document.querySelector('.screenshot-button').dataset.theme=theme;
+    document.querySelector('.screenshot-button').style.aspectRatio=f.image==='plan'?'760 / 900':'760 / 540';
     document.querySelector('#feature-label').textContent=f.label;
     if(!reduced.matches)img.animate([{opacity:.3},{opacity:1}],{duration:360,easing:'cubic-bezier(.22,1,.36,1)'});
   }
